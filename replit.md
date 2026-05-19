@@ -1,44 +1,59 @@
-# [Project name]
+# Quizora
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+MBBS competitive quiz platform for medical students — live & practice quizzes, leaderboard, admin panel, bulk MCQ upload.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/quizora run dev` — run the frontend (port 20593, preview `/`)
+- `pnpm --filter @workspace/quizora run typecheck` — typecheck the frontend
+- Required env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` — both set in Replit Secrets
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- React + Vite + TypeScript + Tailwind CSS v4
+- Supabase (Auth, Database, Storage) — direct client queries, no Express backend
+- shadcn/ui components
+- Wouter for routing
+- TanStack Query for data caching
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/quizora/src/` — all frontend source
+- `artifacts/quizora/src/lib/supabase.ts` — Supabase client + type definitions
+- `artifacts/quizora/src/lib/supabase-schema.sql` — **Full DB schema + RLS + seed** (run in Supabase SQL Editor)
+- `artifacts/quizora/src/lib/utils.ts` — helpers: formatTime, formatCountdown, calcAccuracy, parseBulkMCQ
+- `artifacts/quizora/src/contexts/AuthContext.tsx` — auth state, OTP, Google sign-in
+- `artifacts/quizora/src/components/Layout.tsx` — sidebar (desktop) + bottom nav (mobile)
+- `artifacts/quizora/src/pages/` — all pages (auth, dashboard, quizzes, quiz-detail, leaderboard, profile, admin/*)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **No backend** — Supabase PostgREST + RLS handles all data access; auth via Supabase Auth (OTP + Google OAuth)
+- **Two-page quiz MCQ flow** — question shown first (full focus), then options on next screen (anti-distraction design)
+- **Anti-cheat** — tab-blur detection + right-click disabled during live quizzes
+- **Answer reveal** — unlocked only after quiz `end_time` for live quizzes; practice quizzes show answers immediately
+- **Leaderboard** — three periods: `global`, `weekly`, `quiz`-specific; refreshed manually or on page load
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Email OTP + Google sign-in
+- Dashboard with live/upcoming quiz cards, subject grid, leaderboard preview, stats
+- Quiz engine: countdown timer, two-page question→options flow, score submission
+- Leaderboard with global and weekly tabs
+- User profiles with avatar upload, college/year info, quiz history
+- Admin panel: bulk MCQ paste-upload with image support, question bank, quiz builder with question picker, subject/topic manager
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+_Populate as you build._
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- **Run the SQL schema first** — before signing in, execute `src/lib/supabase-schema.sql` in the Supabase project SQL Editor
+- **Set admin role manually** — after first sign-in, run `UPDATE users SET role = 'admin' WHERE email = 'your@email.com';` in Supabase
+- **Supabase Storage buckets** — create `avatars` and `question-images` buckets in Supabase Storage (set public read)
+- The `increment_user_points` Supabase RPC function is called after quiz submission — add it to the schema or it silently fails (points won't update automatically)
+- Attempts table has `UNIQUE(user_id, quiz_id)` — retakes use upsert and overwrite the previous score
 
 ## Pointers
 
