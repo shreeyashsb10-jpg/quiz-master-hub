@@ -1,0 +1,274 @@
+Create a FULLY FUNCTIONAL production-ready MBBS competitive quiz platform called “Quizora”.
+
+IMPORTANT:
+This project MUST be optimized specifically for:
+
+- Replit free credits
+- minimal AI retries
+- low backend load
+- fast generation
+- minimal debugging
+- low maintenance
+- stable deployment
+
+The goal is:
+Create a website MVP that is COMPLETE, DEPLOYABLE, and READY TO PUBLISH with minimum extra Replit credits.
+
+====================================
+CRITICAL DEVELOPMENT RULES
+
+IMPORTANT:
+Keep the architecture SIMPLE.
+
+DO NOT:
+
+- overengineer backend
+- create unnecessary APIs
+- use websocket realtime systems
+- use complicated generated API clients
+- create unnecessary animations
+- create extremely complex admin analytics
+- create heavy live systems
+- create mobile app
+- create AI systems
+- create OCR systems
+- create advanced anti-cheat systems
+
+FOCUS ONLY ON:
+
+- stable quiz engine
+- fast admin uploads
+- leaderboard
+- live quiz scheduling
+- responsive UI
+- reliable database
+
+====================================
+TECH STACK
+
+Use ONLY:
+
+- React
+- TypeScript
+- Tailwind CSS
+- Supabase Auth
+- Supabase Database
+- Supabase Storage
+
+IMPORTANT:
+Use direct Supabase queries.
+
+DO NOT USE:
+
+- Express backend
+- Orval
+- Swagger generation
+- websocket servers
+- Redis
+- Docker
+- complicated backend architecture
+
+====================================
+AUTHENTICATION
+
+Implement:
+
+- Email OTP login
+- Google login
+- persistent sessions
+
+====================================
+USER PROFILE
+
+Editable fields:
+
+- full name
+- college name
+- MBBS year
+- profile picture
+
+Allow free typing for:
+
+- college name
+- profile name
+
+Do NOT use strict dropdown-only forms.
+
+Show:
+
+- streak
+- total points
+- weekly points
+- quiz history
+- leaderboard rank
+
+====================================
+PRELOADED MBBS SUBJECTS
+
+All major MBBS subjects should already exist by default in database.
+
+Subjects:
+
+- Anatomy
+- Physiology
+- Biochemistry
+- Pathology
+- Pharmacology
+- Microbiology
+- Forensic Medicine
+- PSM
+- ENT
+- Ophthalmology
+- Medicine
+- Surgery
+- Pediatrics
+- Obstetrics and Gynecology
+- Orthopedics
+- Dermatology
+- Psychiatry
+- Radiology
+
+====================================
+DASHBOARD
+
+Dashboard should contain:
+
+1. LIVE QUIZ SECTION
+   Show:
+
+- live quizzes
+- upcoming quizzes
+- recently completed quizzes
+
+Each quiz card should show:
+
+- title
+- subject
+- topic
+- countdown timer
+- status
+- join button
+
+Users should be able to:
+
+- join directly from dashboard
+- view countdown timers
+- see quiz status
+
+2. PERFORMANCE STATS
+   Show:
+
+- total points
+- streak
+- global rank
+- quizzes attempted
+- average accuracy
+
+3. SUBJECT GRID
+   Each subject card should show:
+
+- subject name
+- number of quizzes
+- progress
+- quick start button
+
+4. RECENT ACTIVITY
+   Show:
+
+- recent attempts
+- latest scores
+- recent ranks
+
+5. LEADERBOARD PREVIEW
+   Show:
+
+- top students
+- user rank
+
+IMPORTANT:
+Dashboard must load FAST.
+
+Avoid heavy animations.
+
+====================================
+QUIZ SYSTEM
+
+Implement:
+
+- MCQ quizzes
+- timed quizzes
+- live quizzes
+- practice quizzes
+- explanations
+- review mode
+- performance summary
+
+Quiz should NEVER delete after completion.
+
+====================================
+MULTIPLE LIVE QUIZZES
+
+Support MULTIPLE quizzes simultaneously.
+
+Examples:
+
+- Anatomy quiz
+- Pathology rapid test
+- Pharmacology challenge
+- NEET PG mock test
+
+IMPORTANT:
+Any student can participate in any quiz.
+
+Do NOT restrict by MBBS year.
+
+====================================
+LIVE QUIZ CONTROL
+
+Admin can:
+
+- set start time
+- set end time
+- set duration
+- control leaderboard
+
+Quiz states:
+
+- Upcoming
+- Live
+- Ended
+- Practice Mode
+
+Automatically update quiz state using server time.
+
+====================================
+QUIZ SHARING SYSTEM
+
+Each quiz should have:
+
+- unique URL
+- shareable link
+
+Provide:
+
+- Copy Link button
+- WhatsApp share button
+- Telegram share button
+
+====================================
+LEADERBOARD LOGIC
+
+Ranking priority:
+
+1. highest accuracy
+2. lowest time taken
+3. earliest submission
+
+Leaderboards:
+
+- global leaderboard
+- quiz leaderboard
+- weekly leaderboard
+
+IMPORTANT:
+Do NO

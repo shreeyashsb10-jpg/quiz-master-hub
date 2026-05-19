@@ -1,0 +1,290 @@
+T use websocket realtime systems.
+
+Instead:
+
+- refresh every 20–30 seconds
+- cache leaderboard queries
+
+====================================
+LIVE QUIZ ANSWER SECURITY
+
+During LIVE quizzes:
+
+- do NOT show answers immediately
+- do NOT show explanations immediately
+- do NOT show review mode immediately
+
+Unlock answers ONLY AFTER:
+
+- official quiz end time
+
+After unlock show:
+
+- answers
+- explanations
+- review mode
+- leaderboard
+
+Practice quizzes may show answers immediately.
+
+====================================
+LIGHTWEIGHT ANTI-CHEAT
+
+Implement:
+
+- disable right click
+- disable text selection
+- fullscreen mode during live quiz
+- warning on tab switching
+
+DO NOT attempt impossible screenshot blocking systems.
+
+====================================
+QUESTION DISPLAY
+
+Display:
+PAGE 1:
+
+- question
+- image
+
+PAGE 2:
+
+- options
+
+Do NOT show complete question + all options together.
+
+====================================
+IMAGE SUPPORT
+
+Admin can:
+
+- upload question images
+- preview images
+- delete images
+
+Allow:
+
+- JPG
+- PNG
+- max 2 MB
+
+Compress images automatically.
+
+====================================
+ADMIN PANEL
+
+Create lightweight admin dashboard.
+
+Admin can:
+
+- create topics
+- create quizzes
+- create questions
+- edit quizzes
+- edit questions
+- upload images
+
+====================================
+MOST IMPORTANT FEATURE:
+BULK QUESTION UPLOAD
+
+Admin must be able to upload MANY questions simultaneously.
+
+Provide:
+
+- bulk textarea upload
+- CSV upload
+- JSON upload
+
+Question format example:
+
+Question:
+What is the powerhouse of the cell?
+
+Options:
+A. Nucleus
+B. Ribosome
+C. Mitochondria
+D. Golgi body
+
+Answer:
+C
+
+Explanation:
+Mitochondria produce ATP.
+
+Admin should be able to paste 50–100 questions together.
+
+====================================
+FAST ADMIN QUESTION WORKFLOW
+
+STEP 1:
+Select existing subject
+
+STEP 2:
+Type topic name
+
+STEP 3:
+Paste bulk MCQs
+
+STEP 4:
+System automatically:
+
+- parses questions
+- parses options
+- detects answers
+- detects explanations
+
+STEP 5:
+Preview all parsed questions
+
+STEP 6:
+Optional image upload per question
+
+STEP 7:
+Save all questions together
+
+IMPORTANT:
+Questions must be stored permanently.
+
+Admin should NOT repeatedly recreate:
+
+- subjects
+- questions
+
+====================================
+ADVANCED QUIZ BUILDER
+
+Quiz creation should support BOTH:
+
+1. Single Subject Quiz
+   Example:
+
+- Anatomy Upper Limb Test
+
+2. Mixed Subject Quiz
+   Example:
+
+- NEET PG Mock Test
+- INICET Grand Test
+
+====================================
+QUESTION PICKER SYSTEM
+
+Admin should have searchable question bank.
+
+Filters:
+
+- subject
+- topic
+- difficulty
+
+Admin can:
+
+- select questions individually
+- bulk select questions
+- mix questions from multiple subjects/topics
+
+IMPORTANT:
+Questions should exist independently in database.
+
+Quiz should only reference selected questions.
+
+====================================
+FILTERING
+
+Allow filtering by:
+
+- subject
+- topic
+- live
+- upcoming
+- practice
+
+====================================
+SUBSCRIPTION READY
+
+Prepare architecture for:
+
+- Free Plan
+- Pro Plan
+
+IMPORTANT:
+Do NOT build heavy payment systems now.
+
+Only prepare database structure.
+
+====================================
+FREE PLAN
+
+Free users can:
+
+- join quizzes
+- use dashboard
+- access limited practice quizzes
+- view leaderboard
+
+====================================
+PRO PLAN
+
+Prepare support for:
+
+- premium quizzes
+- grand tests
+- analytics
+- weak subject analysis
+- premium rapid revision
+
+====================================
+DATABASE
+
+Use ONLY simple Supabase tables:
+
+- users
+- subjects
+- topics
+- questions
+- quizzes
+- quiz_questions
+- attempts
+- leaderboard
+
+Add fields:
+
+- planType
+- subscriptionStatus
+- subscriptionStartDate
+- subscriptionEndDate
+
+====================================
+PERFORMANCE OPTIMIZATION
+
+Implement:
+
+- pagination
+- lazy loading
+- optimized queries
+- cached leaderboard
+- minimal rerenders
+
+Avoid:
+
+- infinite loops
+- excessive API calls
+- unnecessary re-renders
+- memory leaks
+
+====================================
+UI STYLE
+
+Theme:
+
+- dark medical theme
+- modern
+- minimal
+- professional
+
+Use:
+
+- responsive la
