@@ -143,6 +143,26 @@ alter table quiz_questions enable row level security;
 alter table attempts enable row level security;
 alter table leaderboard enable row level security;
 
+-- Drop all policies first so this script is safely re-runnable
+drop policy if exists "Users can view own profile" on users;
+drop policy if exists "Users can update own profile" on users;
+drop policy if exists "Users can insert own profile" on users;
+drop policy if exists "Anyone can read subjects" on subjects;
+drop policy if exists "Admins can manage subjects" on subjects;
+drop policy if exists "Anyone can read topics" on topics;
+drop policy if exists "Admins can manage topics" on topics;
+drop policy if exists "Anyone can read questions" on questions;
+drop policy if exists "Admins can manage questions" on questions;
+drop policy if exists "Anyone can read quizzes" on quizzes;
+drop policy if exists "Admins can manage quizzes" on quizzes;
+drop policy if exists "Anyone can read quiz_questions" on quiz_questions;
+drop policy if exists "Admins can manage quiz_questions" on quiz_questions;
+drop policy if exists "Users can read own attempts" on attempts;
+drop policy if exists "Users can insert own attempts" on attempts;
+drop policy if exists "Users can update own attempts" on attempts;
+drop policy if exists "Anyone can read leaderboard" on leaderboard;
+drop policy if exists "Users can upsert own leaderboard" on leaderboard;
+
 -- Users: own row read/write
 create policy "Users can view own profile" on users for select using (auth.uid() = id);
 create policy "Users can update own profile" on users for update using (auth.uid() = id);
