@@ -20,8 +20,9 @@ export default function AuthPage() {
       await signInWithOtp(email);
       setStep("otp");
       toast({ title: "OTP sent", description: "Check your email for the login code." });
-    } catch {
-      toast({ title: "Error", description: "Failed to send OTP. Check your email.", variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Failed to send OTP", description: msg, variant: "destructive" });
     } finally { setLoading(false); }
   }
 
