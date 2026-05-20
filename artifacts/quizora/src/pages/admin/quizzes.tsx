@@ -96,8 +96,20 @@ export default function AdminQuizzes() {
     setDescription(quiz.description ?? "");
     setSubjectId(quiz.subject_id ?? "none");
     setQuizType(quiz.quiz_type);
-    setStartTime(quiz.start_time ? new Date(quiz.start_time).toISOString().slice(0, 16) : "");
-    setEndTime(quiz.end_time ? new Date(quiz.end_time).toISOString().slice(0, 16) : "");
+     setStartTime(
+  quiz.start_time
+    ? new Date(new Date(quiz.start_time).getTime() - new Date().getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16)
+    : ""
+);   
+    setEndTime(
+      quiz.end_time
+        ? new Date(new Date(quiz.end_time).getTime() - new Date().getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16)
+        : ""
+    );
     setDuration(String(quiz.duration_minutes));
     setIsPremium(quiz.is_premium);
     setEditingId(quiz.id);
@@ -114,8 +126,9 @@ export default function AdminQuizzes() {
       subject_id: subjectId === "none" ? null : subjectId,
       quiz_type: quizType,
       status: quizType === "live" && startTime ? "upcoming" as const : "ended" as const,
-      start_time: startTime || null,
-      end_time: endTime || null,
+      start_time: startTime ? new Date(startTime).toISOString() : null,
+      end_time: endTime ? new Date(endTime).toISOString() : null,
+    
       duration_minutes: parseInt(duration) || 30,
       is_premium: isPremium,
     };

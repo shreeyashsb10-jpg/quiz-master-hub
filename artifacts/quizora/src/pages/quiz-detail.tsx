@@ -367,15 +367,36 @@ export default function QuizDetail() {
             </button>
           );
         })}
+        <div className="flex gap-3 w-full mt-2">
+          <Button
+            variant="outline"
+            className="flex-1 h-12"
+            onClick={() => setPhase("question")}
+          >
+            ← Back to Question
+          </Button>
+
+          <Button
+            data-testid="button-next-question"
+            className="flex-1 h-12"
+            onClick={handleNextPhase}
+            disabled={submitting}
+          >
+            {currentIndex < questions.length - 1
+              ? "Next Question →"
+              : submitting
+              ? "Submitting..."
+              : "Submit Quiz"}
+          </Button>
+        </div>
+
         <Button
-          data-testid="button-next-question"
-          className="w-full h-12 mt-2"
+          variant="ghost"
+          size="sm"
           onClick={handleNextPhase}
-          disabled={submitting}
         >
-          {currentIndex < questions.length - 1 ? "Next Question →" : submitting ? "Submitting..." : "Submit Quiz"}
+          Skip
         </Button>
-        <Button variant="ghost" size="sm" onClick={handleNextPhase}>Skip</Button>
       </div>
     </div>
   );

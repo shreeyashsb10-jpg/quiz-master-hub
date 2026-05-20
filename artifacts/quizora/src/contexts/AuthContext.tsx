@@ -72,8 +72,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signInWithOtp(email: string) {
-    const { error } = await supabase.auth.signInWithOtp({ email });
-    if (error) throw error;
+    console.log("SUPABASE URL:", import.meta.env.VITE_SUPABASE_URL);
+
+    const response = await supabase.auth.signInWithOtp({
+      email,
+    });
+
+    console.log("FULL RESPONSE:", response);
+
+    if (response.error) {
+      console.error("OTP ERROR:", response.error);
+      throw response.error;
+    }
   }
 
   async function verifyOtp(email: string, token: string) {
