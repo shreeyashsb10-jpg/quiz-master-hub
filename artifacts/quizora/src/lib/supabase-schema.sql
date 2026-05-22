@@ -162,9 +162,13 @@ drop policy if exists "Users can insert own attempts" on attempts;
 drop policy if exists "Users can update own attempts" on attempts;
 drop policy if exists "Anyone can read leaderboard" on leaderboard;
 drop policy if exists "Users can upsert own leaderboard" on leaderboard;
+drop policy if exists "Anyone can read profiles" on users;
+drop policy if exists "Users can view own profile" on users;
+drop policy if exists "Users can insert own leaderboard" on leaderboard;
+drop policy if exists "Users can update own leaderboard" on leaderboard;
 
--- Users: own row read/write
-create policy "Users can view own profile" on users for select using (auth.uid() = id);
+-- Users: anyone can read basic profile (needed for leaderboard join), own row for write
+create policy "Anyone can read profiles" on users for select using (true);
 create policy "Users can update own profile" on users for update using (auth.uid() = id);
 create policy "Users can insert own profile" on users for insert with check (auth.uid() = id);
 
@@ -203,9 +207,10 @@ create policy "Users can read own attempts" on attempts for select using (auth.u
 create policy "Users can insert own attempts" on attempts for insert with check (auth.uid() = user_id);
 create policy "Users can update own attempts" on attempts for update using (auth.uid() = user_id);
 
--- Leaderboard: everyone reads
+-- Leaderboard: everyone reads, authenticated users write own rows
 create policy "Anyone can read leaderboard" on leaderboard for select using (true);
-create policy "Users can upsert own leaderboard" on leaderboard for all using (auth.uid() = user_id);
+create policy "Users can insert own leaderboard" on leaderboard for insert with check (auth.uid() = user_id);
+create policy "Users can update own leaderboard" on leaderboard for update using (auth.uid() = user_id);
 
 -- ============================================================
 -- TRIGGER: auto-create user profile on signup

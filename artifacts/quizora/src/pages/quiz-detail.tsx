@@ -124,9 +124,10 @@ export default function QuizDetail() {
     });
     const timeTaken = startedAt ? Math.floor((Date.now() - startedAt.getTime()) / 1000) : 0;
     const score = correct * 10;
+    const accuracy = calcAccuracy(correct, questions.length);
 
-    // Save attempt
-    await supabase.from("attempts").upsert({
+    // 1. Save attempt
+    const { error: attemptError } = await supabase.from("attempts").upsert({
       user_id: user.id,
       quiz_id: quiz.id,
       score,
@@ -134,61 +135,68 @@ export default function QuizDetail() {
       correct_answers: correct,
       time_taken_seconds: timeTaken,
       answers: finalAnswers,
-    });
+    }, { onConflict: "user_id,quiz_id" });
+    if (attemptError) toast({ title: "Attempt save error", description: attemptError.message, variant: "destructive" });
 
-    const accuracy = calcAccuracy(correct, questions.length);
-
-    // Upsert per-quiz leaderboard entry
-    await supabase.from("leaderboard").upsert(
+    // 2. Per-quiz leaderboard entry
+    const { error: quizLBError } = await supabase.from("leaderboard").upsert(
       { user_id: user.id, quiz_id: quiz.id, period: "quiz", score, accuracy, time_taken_seconds: timeTaken },
       { onConflict: "user_id,quiz_id,period" }
     );
+    if (quizLBError) toast({ title: "Quiz leaderboard error", description: quizLBError.message, variant: "destructive" });
 
-    // Upsert global leaderboard — best score per user
-    const { data: existingGlobal } = await supabase
+    // 3. Global leaderboard — accumulated total
+    const { data: existingGlobal, error: globalReadErr } = await supabase
       .from("leaderboard")
       .select("id, score")
       .eq("user_id", user.id)
       .eq("period", "global")
       .is("quiz_id", null)
       .maybeSingle();
+    if (globalReadErr) toast({ title: "Global LB read error", description: globalReadErr.message, variant: "destructive" });
 
     if (existingGlobal) {
-      const newScore = (existingGlobal.score ?? 0) + score;
-      await supabase.from("leaderboard")
-        .update({ score: newScore, accuracy, time_taken_seconds: timeTaken, updated_at: new Date().toISOString() })
+      const { error: e } = await supabase.from("leaderboard")
+        .update({ score: (existingGlobal.score ?? 0) + score, accuracy, time_taken_seconds: timeTaken })
         .eq("id", existingGlobal.id);
+      if (e) toast({ title: "Global LB update error", description: e.message, variant: "destructive" });
     } else {
-      await supabase.from("leaderboard").insert(
+      const { error: e } = await supabase.from("leaderboard").insert(
         { user_id: user.id, quiz_id: null, period: "global", score, accuracy, time_taken_seconds: timeTaken }
       );
+      if (e) toast({ title: "Global LB insert error", description: e.message, variant: "destructive" });
     }
 
-    // Upsert weekly leaderboard — accumulated weekly score
-    const { data: existingWeekly } = await supabase
+    // 4. Weekly leaderboard — accumulated weekly
+    const { data: existingWeekly, error: weeklyReadErr } = await supabase
       .from("leaderboard")
       .select("id, score")
       .eq("user_id", user.id)
       .eq("period", "weekly")
       .is("quiz_id", null)
       .maybeSingle();
+    if (weeklyReadErr) toast({ title: "Weekly LB read error", description: weeklyReadErr.message, variant: "destructive" });
 
     if (existingWeekly) {
-      const newScore = (existingWeekly.score ?? 0) + score;
-      await supabase.from("leaderboard")
-        .update({ score: newScore, accuracy, time_taken_seconds: timeTaken, updated_at: new Date().toISOString() })
+      const { error: e } = await supabase.from("leaderboard")
+        .update({ score: (existingWeekly.score ?? 0) + score, accuracy, time_taken_seconds: timeTaken })
         .eq("id", existingWeekly.id);
+      if (e) toast({ title: "Weekly LB update error", description: e.message, variant: "destructive" });
     } else {
-      await supabase.from("leaderboard").insert(
+      const { error: e } = await supabase.from("leaderboard").insert(
         { user_id: user.id, quiz_id: null, period: "weekly", score, accuracy, time_taken_seconds: timeTaken }
       );
+      if (e) toast({ title: "Weekly LB insert error", description: e.message, variant: "destructive" });
     }
 
-    // Update user total_points (read-then-write since no RPC)
-    const { data: userData } = await supabase.from("users").select("total_points").eq("id", user.id).single();
+    // 5. Update user total_points
+    const { data: userData, error: userReadErr } = await supabase.from("users").select("total_points").eq("id", user.id).single();
+    if (userReadErr) toast({ title: "User read error", description: userReadErr.message, variant: "destructive" });
     if (userData) {
-      await supabase.from("users").update({ total_points: (userData.total_points ?? 0) + score }).eq("id", user.id);
+      const { error: e } = await supabase.from("users").update({ total_points: (userData.total_points ?? 0) + score }).eq("id", user.id);
+      if (e) toast({ title: "Points update error", description: e.message, variant: "destructive" });
     }
+
     setResult({ score, correct, total: questions.length, timeTaken });
     setPhase("result");
     setSubmitting(false);
