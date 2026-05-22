@@ -17,9 +17,12 @@ export interface LeaderboardEntry {
 export function useLeaderboard(period: "global" | "weekly" | "quiz" = "global", quizId?: string) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
     setLoading(true);
+    setError(null);
+
     let q = supabase
       .from("leaderboard")
       .select("*, users(full_name, college_name, avatar_url)")
@@ -30,12 +33,18 @@ export function useLeaderboard(period: "global" | "weekly" | "quiz" = "global", 
 
     if (period === "quiz" && quizId) q = q.eq("quiz_id", quizId);
 
-    const { data } = await q;
-    setEntries((data as LeaderboardEntry[]) ?? []);
+    const { data, error: fetchError } = await q;
+
+    if (fetchError) {
+      setError(fetchError.message);
+      setEntries([]);
+    } else {
+      setEntries((data as LeaderboardEntry[]) ?? []);
+    }
     setLoading(false);
   }, [period, quizId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  return { entries, loading, refetch: fetch };
+  return { entries, loading, error, refetch: fetch };
 }

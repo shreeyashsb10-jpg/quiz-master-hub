@@ -112,7 +112,12 @@ export default function QuizDetail() {
   }, [phase, selectedOption, currentIndex, questions]);
 
   const handleSubmit = useCallback(async () => {
-    if (submitting || !user || !quiz) return;
+    if (submitting) return;
+    if (!user) {
+      toast({ title: "Not signed in", description: "Please sign in to save your score.", variant: "destructive" });
+      return;
+    }
+    if (!quiz) return;
     setSubmitting(true);
     const finalAnswers = selectedOption
       ? { ...answers, [questions[currentIndex]?.id]: selectedOption }
@@ -197,6 +202,7 @@ export default function QuizDetail() {
       if (e) toast({ title: "Points update error", description: e.message, variant: "destructive" });
     }
 
+    toast({ title: "Score saved!", description: `${score} pts · ${accuracy}% accuracy` });
     setResult({ score, correct, total: questions.length, timeTaken });
     setPhase("result");
     setSubmitting(false);

@@ -8,7 +8,7 @@ import { calcAccuracy } from "@/lib/utils";
 
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState<"global" | "weekly" | "quiz">("global");
-  const { entries, loading, refetch } = useLeaderboard(period);
+  const { entries, loading, error, refetch } = useLeaderboard(period);
   const { profile } = useAuth();
 
   const myRank = entries.findIndex(e => e.user_id === profile?.id) + 1;
@@ -49,6 +49,12 @@ export default function LeaderboardPage() {
       {loading ? (
         <div className="space-y-2">
           {[...Array(10)].map((_, i) => <div key={i} className="h-16 bg-card border border-border rounded-xl animate-pulse" />)}
+        </div>
+      ) : error ? (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-6 text-center space-y-2">
+          <p className="text-destructive font-medium text-sm">Failed to load leaderboard</p>
+          <p className="text-xs text-muted-foreground font-mono">{error}</p>
+          <button onClick={refetch} className="text-xs text-primary underline mt-1">Try again</button>
         </div>
       ) : entries.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 text-center text-muted-foreground">
