@@ -25,6 +25,7 @@ export function useLeaderboard(period: "global" | "weekly" | "quiz" = "global", 
       .select("*, users(full_name, college_name, avatar_url)")
       .eq("period", period)
       .order("score", { ascending: false })
+      .order("accuracy", { ascending: false })
       .limit(50);
 
     if (period === "quiz" && quizId) q = q.eq("quiz_id", quizId);

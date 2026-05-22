@@ -7,7 +7,7 @@ import { Trophy, RefreshCw } from "lucide-react";
 import { calcAccuracy } from "@/lib/utils";
 
 export default function LeaderboardPage() {
-  const [period, setPeriod] = useState<"global" | "weekly">("global");
+  const [period, setPeriod] = useState<"global" | "weekly" | "quiz">("global");
   const { entries, loading, refetch } = useLeaderboard(period);
   const { profile } = useAuth();
 
@@ -26,7 +26,7 @@ export default function LeaderboardPage() {
 
       {/* Period tabs */}
       <div className="flex gap-2">
-        {(["global", "weekly"] as const).map(p => (
+        {(["global", "weekly", "quiz"] as const).map(p => (
           <Button
             key={p}
             variant={period === p ? "default" : "outline"}

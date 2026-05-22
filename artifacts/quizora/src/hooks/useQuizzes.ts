@@ -31,12 +31,45 @@ export function useQuizzes(filters?: { type?: string; status?: string; subject_i
       .order("created_at", { ascending: false });
 
     if (filters?.type) q = q.eq("quiz_type", filters.type);
-    if (filters?.status) q = q.eq("status", filters.status);
+    
     if (filters?.subject_id) q = q.eq("subject_id", filters.subject_id);
 
     const { data, error: err } = await q;
     if (err) setError(err.message);
-    else setQuizzes((data as Quiz[]) ?? []);
+    else {
+      let filtered = (data as Quiz[]) ?? [];
+
+      if (filters?.status) {
+        const now = new Date();
+
+        filtered = filtered.filter((quiz) => {
+          const start = quiz.start_time
+            ? new Date(quiz.start_time)
+            : null;
+
+          const end = quiz.end_time
+            ? new Date(quiz.end_time)
+            : null;
+
+          let actualStatus: "upcoming" | "live" | "ended" = "ended";
+
+          if (start && start > now) {
+            actualStatus = "upcoming";
+          } else if (
+            start &&
+            end &&
+            start <= now &&
+            end >= now
+          ) {
+            actualStatus = "live";
+          }
+
+          return actualStatus === filters.status;
+        });
+      }
+
+      setQuizzes(filtered);
+    }
     setLoading(false);
   }, [filters?.type, filters?.status, filters?.subject_id]);
 

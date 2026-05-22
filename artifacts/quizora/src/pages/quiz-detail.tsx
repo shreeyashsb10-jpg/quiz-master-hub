@@ -125,20 +125,70 @@ export default function QuizDetail() {
     const timeTaken = startedAt ? Math.floor((Date.now() - startedAt.getTime()) / 1000) : 0;
     const score = correct * 10;
 
+    // Save attempt
     await supabase.from("attempts").upsert({
-      user_id: user.id, quiz_id: quiz.id, score,
-      total_questions: questions.length, correct_answers: correct,
-      time_taken_seconds: timeTaken, answers: finalAnswers,
+      user_id: user.id,
+      quiz_id: quiz.id,
+      score,
+      total_questions: questions.length,
+      correct_answers: correct,
+      time_taken_seconds: timeTaken,
+      answers: finalAnswers,
     });
 
-    // Update user total points (increment by score)
-    supabase.rpc("increment_user_points", { uid: user.id, pts: score });
+    const accuracy = calcAccuracy(correct, questions.length);
 
-    await supabase.from("leaderboard").upsert({
-      user_id: user.id, quiz_id: quiz.id, period: "quiz",
-      score, accuracy: calcAccuracy(correct, questions.length), time_taken_seconds: timeTaken,
-    });
+    // Upsert per-quiz leaderboard entry
+    await supabase.from("leaderboard").upsert(
+      { user_id: user.id, quiz_id: quiz.id, period: "quiz", score, accuracy, time_taken_seconds: timeTaken },
+      { onConflict: "user_id,quiz_id,period" }
+    );
 
+    // Upsert global leaderboard — best score per user
+    const { data: existingGlobal } = await supabase
+      .from("leaderboard")
+      .select("id, score")
+      .eq("user_id", user.id)
+      .eq("period", "global")
+      .is("quiz_id", null)
+      .maybeSingle();
+
+    if (existingGlobal) {
+      const newScore = (existingGlobal.score ?? 0) + score;
+      await supabase.from("leaderboard")
+        .update({ score: newScore, accuracy, time_taken_seconds: timeTaken, updated_at: new Date().toISOString() })
+        .eq("id", existingGlobal.id);
+    } else {
+      await supabase.from("leaderboard").insert(
+        { user_id: user.id, quiz_id: null, period: "global", score, accuracy, time_taken_seconds: timeTaken }
+      );
+    }
+
+    // Upsert weekly leaderboard — accumulated weekly score
+    const { data: existingWeekly } = await supabase
+      .from("leaderboard")
+      .select("id, score")
+      .eq("user_id", user.id)
+      .eq("period", "weekly")
+      .is("quiz_id", null)
+      .maybeSingle();
+
+    if (existingWeekly) {
+      const newScore = (existingWeekly.score ?? 0) + score;
+      await supabase.from("leaderboard")
+        .update({ score: newScore, accuracy, time_taken_seconds: timeTaken, updated_at: new Date().toISOString() })
+        .eq("id", existingWeekly.id);
+    } else {
+      await supabase.from("leaderboard").insert(
+        { user_id: user.id, quiz_id: null, period: "weekly", score, accuracy, time_taken_seconds: timeTaken }
+      );
+    }
+
+    // Update user total_points (read-then-write since no RPC)
+    const { data: userData } = await supabase.from("users").select("total_points").eq("id", user.id).single();
+    if (userData) {
+      await supabase.from("users").update({ total_points: (userData.total_points ?? 0) + score }).eq("id", user.id);
+    }
     setResult({ score, correct, total: questions.length, timeTaken });
     setPhase("result");
     setSubmitting(false);
@@ -157,7 +207,7 @@ export default function QuizDetail() {
 
   // RESULT SCREEN
   if (phase === "result" && result) {
-    const accuracy = calcAccuracy(result.correct, result.total);
+    const accuracyPercent = calcAccuracy(result.correct, result.total);
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-background">
         <div className="max-w-lg w-full space-y-6">
@@ -172,7 +222,7 @@ export default function QuizDetail() {
                 <div className="text-xs text-muted-foreground">Points</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-emerald-400">{accuracy}%</div>
+                <div className="text-3xl font-bold text-emerald-400">{accuracyPercent}%</div>
                 <div className="text-xs text-muted-foreground">Accuracy</div>
               </div>
               <div className="text-center">
@@ -205,18 +255,59 @@ export default function QuizDetail() {
               {questions.map((question, idx) => {
                 const userAns = answers[question.id];
                 const correct = userAns === question.correct_answer;
+
                 return (
-                  <div key={question.id} className="p-4 space-y-2">
+                  <div key={question.id} className="p-4 space-y-3">
                     <div className="flex items-start gap-2">
-                      {correct
-                        ? <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                        : <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />}
-                      <p className="text-sm font-medium">{idx + 1}. {question.question_text}</p>
+                      {correct ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                      )}
+
+                      <p className="text-sm font-medium">
+                        {idx + 1}. {question.question_text}
+                      </p>
                     </div>
-                    <div className="ml-6 text-xs text-muted-foreground space-y-1">
-                      <div>Your answer: <span className={correct ? "text-emerald-400" : "text-red-400"}>{userAns ?? "Not answered"}</span></div>
-                      {!correct && <div>Correct: <span className="text-emerald-400">{question.correct_answer}</span></div>}
-                      {question.explanation && <div className="mt-1 text-muted-foreground italic">{question.explanation}</div>}
+
+                    <div className="ml-6 space-y-2">
+                      {(["A", "B", "C", "D"] as const).map(opt => {
+                        const optionText =
+                          question[`option_${opt.toLowerCase() as "a" | "b" | "c" | "d"}`];
+
+                        const isUser = userAns === opt;
+                        const isCorrect = question.correct_answer === opt;
+
+                        return (
+                          <div
+                            key={opt}
+                            className={`p-3 rounded-lg border text-sm ${
+                              isCorrect
+                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
+                                : isUser
+                                ? "border-red-500 bg-red-500/10 text-red-400"
+                                : "border-border"
+                            }`}
+                          >
+                            <span className="font-semibold mr-2">{opt}.</span>
+                            {optionText}
+
+                            {isUser && (
+                              <span className="ml-2 text-xs">(Your Answer)</span>
+                            )}
+
+                            {isCorrect && (
+                              <span className="ml-2 text-xs">(Correct Answer)</span>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {question.explanation && (
+                        <div className="text-xs text-muted-foreground italic pt-1">
+                          Explanation: {question.explanation}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -287,9 +378,34 @@ export default function QuizDetail() {
                   You've already completed this quiz!<br />
                   Score: {existingAttempt.score} pts · {calcAccuracy(existingAttempt.correct_answers, existingAttempt.total_questions)}% accuracy
                 </div>
-                <Button data-testid="button-start-quiz" className="w-full" onClick={handleStart} variant="outline">
-                  Retake
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setAnswers(existingAttempt.answers || {});
+                      setShowAnswers(true);
+                      setPhase("result");
+
+                      setResult({
+                        score: existingAttempt.score,
+                        correct: existingAttempt.correct_answers,
+                        total: existingAttempt.total_questions,
+                        timeTaken: existingAttempt.time_taken_seconds,
+                      });
+                    }}
+                  >
+                    Review Answers
+                  </Button>
+
+                  <Button
+                    data-testid="button-start-quiz"
+                    className="flex-1"
+                    onClick={handleStart}
+                  >
+                    Retake Quiz
+                  </Button>
+                </div>
               </div>
             ) : (
               <Button

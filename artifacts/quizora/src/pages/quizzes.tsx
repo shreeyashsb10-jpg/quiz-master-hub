@@ -111,8 +111,24 @@ export default function QuizzesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/quiz/${quiz.id}`)}
-                    title="Copy link"
+                    onClick={async () => {
+                      const shareUrl = `${window.location.origin}/quiz/${quiz.id}`;
+
+                      if (navigator.share) {
+                        try {
+                          await navigator.share({
+                            title: quiz.title,
+                            text: `Try this quiz: ${quiz.title}`,
+                            url: shareUrl,
+                          });
+                        } catch (err) {
+                          console.log(err);
+                        }
+                      } else {
+                        await navigator.clipboard.writeText(shareUrl);
+                        alert("Quiz link copied!");
+                      }
+                    }}
                   >
                     Share
                   </Button>
