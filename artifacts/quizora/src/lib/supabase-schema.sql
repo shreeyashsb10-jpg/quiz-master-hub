@@ -104,7 +104,7 @@ create table if not exists quiz_questions (
 -- ============================================================
 create table if not exists attempts (
   id uuid default uuid_generate_v4() primary key,
-  user_id uuid references auth.users(id) on delete cascade not null,
+  user_id uuid references public.users(id) on delete cascade not null,
   quiz_id uuid references quizzes(id) on delete cascade not null,
   score integer default 0,
   total_questions integer default 0,
@@ -121,7 +121,7 @@ create table if not exists attempts (
 -- ============================================================
 create table if not exists leaderboard (
   id uuid default uuid_generate_v4() primary key,
-  user_id uuid references auth.users(id) on delete cascade not null,
+  user_id uuid references public.users(id) on delete cascade not null,
   quiz_id uuid references quizzes(id) on delete cascade,
   period text default 'global' check (period in ('global', 'weekly', 'quiz')),
   score integer default 0,
