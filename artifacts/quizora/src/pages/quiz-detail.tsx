@@ -339,8 +339,8 @@ export default function QuizDetail() {
             <Link href="/dashboard" className="flex-1">
               <Button variant="outline" className="w-full"><ArrowLeft className="w-4 h-4 mr-1" /> Dashboard</Button>
             </Link>
-            <Link href="/leaderboard" className="flex-1">
-              <Button className="w-full"><Trophy className="w-4 h-4 mr-1" /> Leaderboard</Button>
+            <Link href={`/leaderboard?quiz=${quiz.id}`} className="flex-1">
+              <Button className="w-full"><Trophy className="w-4 h-4 mr-1" /> Quiz Ranking</Button>
             </Link>
           </div>
         </div>

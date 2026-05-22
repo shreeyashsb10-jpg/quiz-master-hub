@@ -14,7 +14,10 @@ export interface LeaderboardEntry {
   users?: { full_name: string | null; college_name: string | null; avatar_url: string | null };
 }
 
-export function useLeaderboard(period: "global" | "weekly" | "quiz" = "global", quizId?: string) {
+export function useLeaderboard(
+  period: "global" | "weekly" | "quiz" = "global",
+  quizId?: string
+) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,10 +31,35 @@ export function useLeaderboard(period: "global" | "weekly" | "quiz" = "global", 
       .select("*, users(full_name, college_name, avatar_url)")
       .eq("period", period)
       .order("score", { ascending: false })
-      .order("accuracy", { ascending: false })
-      .limit(50);
+      .limit(100);
 
-    if (period === "quiz" && quizId) q = q.eq("quiz_id", quizId);
+    // For quiz leaderboards: rank by score DESC, then time ASC (fastest wins), then accuracy DESC
+    if (period === "quiz") {
+      if (!quizId) {
+        setEntries([]);
+        setLoading(false);
+        return;
+      }
+      q = supabase
+        .from("leaderboard")
+        .select("*, users(full_name, college_name, avatar_url)")
+        .eq("period", "quiz")
+        .eq("quiz_id", quizId)
+        .order("score", { ascending: false })
+        .order("time_taken_seconds", { ascending: true })
+        .order("accuracy", { ascending: false })
+        .limit(100);
+    } else {
+      // Global / weekly: score DESC, accuracy DESC
+      q = supabase
+        .from("leaderboard")
+        .select("*, users(full_name, college_name, avatar_url)")
+        .eq("period", period)
+        .is("quiz_id", null)
+        .order("score", { ascending: false })
+        .order("accuracy", { ascending: false })
+        .limit(100);
+    }
 
     const { data, error: fetchError } = await q;
 
