@@ -25,9 +25,29 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const liveQuizzes = quizzes.filter(q => q.status === "live" || (q.start_time && new Date(q.start_time).getTime() > Date.now()));
-  const recentQuizzes = quizzes.filter(q => q.status === "ended").slice(0, 3);
+  const now = Date.now();
 
+  const liveQuizzes = quizzes.filter(q => {
+    if (!q.start_time || !q.end_time) return false;
+
+    return (
+      new Date(q.start_time).getTime() <= now &&
+      new Date(q.end_time).getTime() >= now
+    );
+  });
+
+  const upcomingQuizzes = quizzes.filter(q => {
+    if (!q.start_time) return false;
+
+    return new Date(q.start_time).getTime() > now;
+  });
+
+  const recentQuizzes = quizzes.filter(q => {
+    if (!q.end_time) return false;
+
+    return new Date(q.end_time).getTime() < now;
+  }).slice(0, 3);
+  
   const totalAttempted = attempts.length;
   const avgAccuracy = attempts.length
     ? Math.round(attempts.reduce((sum, a) => sum + calcAccuracy(a.correct_answers, a.total_questions), 0) / attempts.length)
@@ -74,12 +94,12 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Live & Upcoming Quizzes */}
+      {/* Live Quizzes */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            Live & Upcoming Quizzes
+            <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
+            Live Quizzes
           </h2>
           <Link href="/quizzes">
             <Button variant="ghost" size="sm">View all <ChevronRight className="w-4 h-4" /></Button>
@@ -116,7 +136,7 @@ export default function Dashboard() {
                   </div>
                   {quiz.start_time && statusInfo.label === "Upcoming" && (
                     <div className="text-xs text-amber-400 font-mono">
-                      Starts in {formatCountdown(quiz.start_time)}
+                      Starts in {formatCountdown(quiz.start_time ?? "")}
                     </div>
                   )}
                   {quiz.end_time && statusInfo.label === "Live" && (
@@ -133,6 +153,83 @@ export default function Dashboard() {
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+      {/* Upcoming Quizzes */}
+      <div>
+        <div className="flex items-center justify-between mb-4 mt-8">
+          <h2 className="text-lg font-semibold">
+            Upcoming Quizzes
+          </h2>
+        </div>
+
+        {upcomingQuizzes.length === 0 ? (
+          <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+            No upcoming quizzes
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {upcomingQuizzes.slice(0, 6).map(quiz => (
+              <div
+                key={quiz.id}
+                className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3"
+              >
+                <Badge className="w-fit">
+                  Upcoming
+                </Badge>
+
+                <div>
+                  <h3 className="font-semibold leading-tight">
+                    {quiz.title}
+                  </h3>
+
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {quiz.subjects?.name ?? "Mixed Subject"}
+                  </p>
+                </div>
+
+                <div className="text-xs text-amber-400 font-mono">
+                  Starts in {formatCountdown(quiz.start_time ?? "")}
+                </div>
+
+                <Link href={`/quiz/${quiz.id}`}>
+                  <Button className="w-full" size="sm" variant="outline">
+                    View Quiz
+                  </Button>
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Recent Quizzes */}
+      <div>
+        <div className="flex items-center justify-between mb-4 mt-8">
+          <h2 className="text-lg font-semibold">
+            Recent Quizzes
+          </h2>
+        </div>
+
+        {recentQuizzes.length === 0 ? (
+          <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+            No recent quizzes
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentQuizzes.map(quiz => (
+              <Link key={quiz.id} href={`/quiz/${quiz.id}`}>
+                <div className="bg-card border border-border rounded-xl p-5 cursor-pointer hover:border-primary/40 transition-colors">
+                  <h3 className="font-semibold">
+                    {quiz.title}
+                  </h3>
+
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {quiz.subjects?.name ?? "Mixed Subject"}
+                  </p>
+                </div>
+              </Link>
+            ))}
           </div>
         )}
       </div>

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useSearch } from "wouter";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { useQuizzes } from "@/hooks/useQuizzes";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,9 +8,8 @@ import { Trophy, RefreshCw, Clock, ChevronDown } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 
 export default function LeaderboardPage() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const quizParam = params.get("quiz") ?? "";
+  // Read quiz param from URL directly — avoids wouter hook timing issues
+  const quizParam = new URLSearchParams(window.location.search).get("quiz") ?? "";
 
   const [period, setPeriod] = useState<"global" | "weekly" | "quiz">(quizParam ? "quiz" : "global");
   const [selectedQuizId, setSelectedQuizId] = useState<string>(quizParam);

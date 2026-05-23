@@ -54,6 +54,7 @@ export default function AdminQuizzes() {
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [quizQuestionIds, setQuizQuestionIds] = useState<Set<string>>(new Set());
   const [searchQ, setSearchQ] = useState("");
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
 
   async function loadQuizzes() {
     setLoading(true);
@@ -62,7 +63,20 @@ export default function AdminQuizzes() {
     setLoading(false);
   }
 
-  useEffect(() => { loadQuizzes(); }, []);
+  useEffect(() => {
+    loadQuizzes();
+
+    async function loadQuestions() {
+      const { data } = await supabase
+        .from("questions")
+        .select("id, question_text, subjects(name)")
+        .limit(200);
+
+      setAllQuestions((data as unknown as Question[]) ?? []);
+    }
+
+    loadQuestions();
+  }, []);
 
   async function openPicker(quizId: string) {
     setSelectedQuizId(quizId);
@@ -87,7 +101,7 @@ export default function AdminQuizzes() {
 
   function resetForm() {
     setTitle(""); setDescription(""); setSubjectId("none"); setQuizType("practice");
-    setStartTime(""); setEndTime(""); setDuration("30"); setIsPremium(false);
+    setStartTime(""); setEndTime(""); setDuration("30"); setIsPremium(false);setSelectedQuestionIds([]);
     setEditingId(null);
   }
 
@@ -137,8 +151,36 @@ export default function AdminQuizzes() {
       await supabase.from("quizzes").update(payload).eq("id", editingId);
       toast({ title: "Quiz updated!" });
     } else {
-      await supabase.from("quizzes").insert({ ...payload, created_by: user.id });
-      toast({ title: "Quiz created!" });
+      const { data: createdQuiz, error } = await supabase
+        .from("quizzes")
+        .insert({ ...payload, created_by: user.id })
+        .select()
+        .single();
+
+      if (error) {
+        toast({
+          title: "Error creating quiz",
+          description: error.message,
+          variant: "destructive",
+        });
+
+        setSaving(false);
+        return;
+      }
+
+      if (selectedQuestionIds.length > 0) {
+        const quizQuestions = selectedQuestionIds.map((qid, index) => ({
+          quiz_id: createdQuiz.id,
+          question_id: qid,
+          order_index: index,
+        }));
+
+        await supabase
+          .from("quiz_questions")
+          .insert(quizQuestions);
+      }
+
+      toast({ title: "Quiz created with questions!" });
     }
 
     resetForm(); setShowForm(false); loadQuizzes(); setSaving(false);
@@ -224,6 +266,70 @@ export default function AdminQuizzes() {
               <input type="checkbox" id="premium" checked={isPremium} onChange={e => setIsPremium(e.target.checked)} className="rounded" />
               <label htmlFor="premium" className="text-sm">Premium only</label>
             </div>
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-medium">
+              Select Questions
+            </label>
+
+            <Input
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              placeholder="Search questions..."
+            />
+
+            <div className="max-h-64 overflow-y-auto border border-border rounded-xl divide-y divide-border">
+              {filteredQuestions.map(q => {
+                const selected = selectedQuestionIds.includes(q.id);
+
+                return (
+                  <button
+                    type="button"
+                    key={q.id}
+                    onClick={() => {
+                      if (selected) {
+                        setSelectedQuestionIds(prev =>
+                          prev.filter(id => id !== q.id)
+                        );
+                      } else {
+                        setSelectedQuestionIds(prev => [...prev, q.id]);
+                      }
+                    }}
+                    className={`w-full text-left p-3 hover:bg-muted/50 transition-colors ${
+                      selected ? "bg-primary/10" : ""
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-5 h-5 rounded border flex items-center justify-center mt-0.5 ${
+                          selected
+                            ? "bg-primary border-primary"
+                            : "border-border"
+                        }`}
+                      >
+                        {selected && (
+                          <Check className="w-3 h-3 text-primary-foreground" />
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-sm line-clamp-2">
+                          {q.question_text}
+                        </p>
+
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {q.subjects?.name ?? "General"}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              {selectedQuestionIds.length} questions selected
+            </p>
           </div>
           <div className="flex gap-3">
             <Button data-testid="button-save-quiz" type="submit" disabled={saving}>{saving ? "Saving..." : editingId ? "Update" : "Create Quiz"}</Button>

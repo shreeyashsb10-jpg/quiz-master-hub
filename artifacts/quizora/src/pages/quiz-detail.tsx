@@ -249,14 +249,30 @@ export default function QuizDetail() {
             </p>
 
             {/* Share */}
-            <div className="flex gap-2 justify-center pt-2">
-              <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(window.location.href)}>
-                <Share2 className="w-3 h-3 mr-1" /> Copy Link
+            <div className="flex gap-2 justify-center pt-2 flex-wrap">
+              <Button
+                variant="outline" size="sm"
+                onClick={async () => {
+                  const shareText = `I scored ${result.score} pts on "${quiz.title}"! 🏆`;
+                  if (navigator.share) {
+                    try { await navigator.share({ title: quiz.title, text: shareText }); return; } catch {}
+                  }
+                  await navigator.clipboard.writeText(shareText).catch(() => {});
+                  toast({ title: "Copied!", description: "Score copied to clipboard." });
+                }}
+              >
+                <Share2 className="w-3 h-3 mr-1" /> Share
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.open(`https://wa.me/?text=I scored ${result.score} pts on "${quiz.title}" - ${window.location.href}`, "_blank")}>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`I scored ${result.score} pts on "${quiz.title}"! 🏆 Try it on Quizora`)}`, "_blank")}
+              >
                 <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.open(`https://t.me/share/url?url=${window.location.href}&text=I scored ${result.score} pts on "${quiz.title}"`, "_blank")}>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => window.open(`https://t.me/share/url?url=${encodeURIComponent("https://quizora.app")}&text=${encodeURIComponent(`I scored ${result.score} pts on "${quiz.title}"! 🏆`)}`, "_blank")}
+              >
                 <Send className="w-3 h-3 mr-1" /> Telegram
               </Button>
             </div>
