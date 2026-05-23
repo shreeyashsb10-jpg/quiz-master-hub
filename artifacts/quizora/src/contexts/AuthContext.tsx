@@ -31,11 +31,26 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/** Check localStorage for a stored, non-expired Supabase session without a network call */
+function hasStoredSession(): boolean {
+  try {
+    const key = Object.keys(localStorage).find(k => k.endsWith("-auth-token"));
+    if (!key) return false;
+    const data = JSON.parse(localStorage.getItem(key) ?? "{}");
+    // expires_at is a Unix timestamp in seconds
+    return !!data?.access_token && (data?.expires_at ?? 0) > Date.now() / 1000;
+  } catch {
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Only show the loading spinner if there's a stored session to validate.
+  // Fresh visitors see the login page immediately without waiting.
+  const [loading, setLoading] = useState(hasStoredSession);
 
   async function fetchProfile(userId: string) {
     const { data } = await supabase.from("users").select("*").eq("id", userId).single();
@@ -72,18 +87,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signInWithOtp(email: string) {
-    console.log("SUPABASE URL:", import.meta.env.VITE_SUPABASE_URL);
-
-    const response = await supabase.auth.signInWithOtp({
-      email,
-    });
-
-    console.log("FULL RESPONSE:", response);
-
-    if (response.error) {
-      console.error("OTP ERROR:", response.error);
-      throw response.error;
-    }
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    if (error) throw error;
   }
 
   async function verifyOtp(email: string, token: string) {
