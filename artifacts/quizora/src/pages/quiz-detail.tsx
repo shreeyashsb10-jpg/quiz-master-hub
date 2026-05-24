@@ -552,8 +552,8 @@ export default function QuizDetail() {
   </Button>
 </div>
         </div>
+        {BackConfirmDialog}
       </div>
-      {BackConfirmDialog}
     );
   }
 
