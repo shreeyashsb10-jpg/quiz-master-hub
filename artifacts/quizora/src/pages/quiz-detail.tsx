@@ -3,11 +3,12 @@ import { useParams, useLocation } from "wouter";
 import { useQuiz } from "@/hooks/useQuizzes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuizAttempt } from "@/hooks/useAttempts";
+import { useQuizGuard } from "@/contexts/QuizGuardContext";
 import { supabase } from "@/lib/supabase";
 import { formatTime, formatCountdown, calcAccuracy, getQuizStatusInfo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trophy, Clock, Share2, MessageCircle, Send, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
+import { Trophy, Clock, Share2, MessageCircle, Send, ArrowLeft, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 
 interface Question {
@@ -31,6 +32,7 @@ export default function QuizDetail() {
   const { user } = useAuth();
   const { attempt: existingAttempt } = useQuizAttempt(id);
   const { toast } = useToast();
+  const { setQuizActive } = useQuizGuard();
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [phase, setPhase] = useState<QuizPhase>("lobby");
@@ -42,6 +44,7 @@ export default function QuizDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ score: number; correct: number; total: number; timeTaken: number } | null>(null);
   const [showAnswers, setShowAnswers] = useState(false);
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -86,6 +89,26 @@ export default function QuizDetail() {
     return () => { window.removeEventListener("blur", handleBlur); document.removeEventListener("contextmenu", handleContext); };
   }, [quiz?.quiz_type, phase]);
 
+  // Prevent accidental browser close / refresh during active quiz
+  useEffect(() => {
+    if (phase === "lobby" || phase === "result") return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [phase]);
+
+  // Intercept browser back button during active quiz
+  useEffect(() => {
+    if (phase === "lobby" || phase === "result") return;
+    window.history.pushState(null, "", window.location.href);
+    const handlePop = () => {
+      window.history.pushState(null, "", window.location.href);
+      setShowBackConfirm(true);
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [phase]);
+
   const handleStart = useCallback(async () => {
     if (!user) { setLocation("/auth"); return; }
     if (questions.length === 0) { toast({ title: "No questions", description: "This quiz has no questions yet." }); return; }
@@ -93,6 +116,7 @@ export default function QuizDetail() {
     setPhase("question");
     setCurrentIndex(0);
     setAnswers({});
+    setQuizActive(true);
   }, [user, questions]);
 
   const handleNextPhase = useCallback(() => {
@@ -203,6 +227,7 @@ export default function QuizDetail() {
     }
 
     toast({ title: "Score saved!", description: `${score} pts · ${accuracy}% accuracy` });
+    setQuizActive(false);
     setResult({ score, correct, total: questions.length, timeTaken });
     setPhase("result");
     setSubmitting(false);
@@ -455,6 +480,35 @@ export default function QuizDetail() {
 
   if (!q) return null;
 
+  // Shared back-button confirm dialog (browser back / in-quiz back)
+  const BackConfirmDialog = showBackConfirm ? (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-xl">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-destructive" />
+          </div>
+          <h2 className="font-semibold text-lg">Exit Quiz?</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Are you sure you want to exit the quiz? Your progress may be lost.
+        </p>
+        <div className="flex gap-3 pt-1">
+          <Button variant="outline" className="flex-1" onClick={() => setShowBackConfirm(false)}>
+            Stay in Quiz
+          </Button>
+          <Button variant="destructive" className="flex-1" onClick={() => {
+            setShowBackConfirm(false);
+            setQuizActive(false);
+            setLocation("/quizzes");
+          }}>
+            Exit Quiz
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   // QUESTION SCREEN (page 1)
   if (phase === "question") {
     return (
@@ -475,11 +529,31 @@ export default function QuizDetail() {
             <p className="text-sm text-muted-foreground mb-3">Question {currentIndex + 1}</p>
             <p className="text-lg font-medium leading-relaxed">{q.question_text}</p>
           </div>
-          <Button data-testid="button-show-options" className="w-full h-12" onClick={handleNextPhase}>
-            Show Options →
-          </Button>
+          <div className="flex gap-3 w-full">
+  <Button
+    variant="outline"
+    className="flex-1 h-12"
+    onClick={() => {
+      if (currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      }
+    }}
+    disabled={currentIndex === 0}
+  >
+    ← Previous Question
+  </Button>
+
+  <Button
+    data-testid="button-show-options"
+    className="flex-1 h-12"
+    onClick={handleNextPhase}
+  >
+    Show Options →
+  </Button>
+</div>
         </div>
       </div>
+      {BackConfirmDialog}
     );
   }
 
@@ -544,6 +618,7 @@ export default function QuizDetail() {
           Skip
         </Button>
       </div>
+      {BackConfirmDialog}
     </div>
   );
 }
