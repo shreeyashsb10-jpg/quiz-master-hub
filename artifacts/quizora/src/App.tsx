@@ -34,10 +34,18 @@ function PageLoader() {
 }
 
 function ProtectedRoutes() {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
 
   // Show spinner ONLY while validating a stored session — not for fresh visitors
   if (loading) return <PageLoader />;
+  if (
+    user &&
+    profile &&
+    (!profile.full_name || profile.full_name === "Anonymous") &&
+    window.location.pathname !== "/profile"
+  ) {
+    return <Redirect to="/profile" />;
+  }
 
   if (!user) {
     return (
@@ -64,7 +72,11 @@ function ProtectedRoutes() {
           <Route path="/admin/questions" component={AdminQuestions} />
           <Route path="/admin/quizzes" component={AdminQuizzes} />
           <Route path="/admin/subjects" component={AdminSubjects} />
-          <Route component={NotFound} />
+          <Route>
+            <Redirect to="/dashboard" />
+          </Route>
+
+    
         </Switch>
       </Suspense>
     </Layout>
