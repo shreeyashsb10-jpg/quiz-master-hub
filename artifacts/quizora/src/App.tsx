@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -91,6 +91,13 @@ function ProtectedRoutes() {
 }
 
 function App() {
+  // Capture ?code= from URL so it survives the auth redirect into profile-setup
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code) sessionStorage.setItem("quizora_join_code", code.toUpperCase());
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
