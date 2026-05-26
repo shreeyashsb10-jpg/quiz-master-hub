@@ -32,6 +32,27 @@ function PageLoader() {
   );
 }
 
+// Bug 4: tiny component that just saves code + redirects
+function JoinRedirect({ params }: { params: { code: string } }) {
+  const [, navigate] = useLocation();
+  const { user, isProfileComplete } = useAuth();
+
+  useEffect(() => {
+    if (params.code) {
+      sessionStorage.setItem("quizora_join_code", params.code.toUpperCase());
+    }
+    if (!user) {
+      navigate("/auth", { replace: true });
+    } else if (!isProfileComplete) {
+      navigate("/profile-setup", { replace: true });
+    } else {
+      navigate("/dashboard", { replace: true });
+    }
+  }, []);
+
+  return <PageLoader />;
+}
+
 function ProtectedRoutes() {
   const { user, loading, isAdmin, isProfileComplete } = useAuth();
   const [location] = useLocation();
@@ -43,23 +64,27 @@ function ProtectedRoutes() {
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/auth" component={AuthPage} />
+          {/* Bug 4: join link works even when not logged in — saves code then goes to auth */}
+          <Route path="/join/:code">
+            {(params) => {
+              if (params.code) sessionStorage.setItem("quizora_join_code", params.code.toUpperCase());
+              return <Redirect to="/auth" />;
+            }}
+          </Route>
           <Route><Redirect to="/auth" /></Route>
         </Switch>
       </Suspense>
     );
   }
 
-  // Student with incomplete profile → force setup (but not while already on setup page)
   if (!isProfileComplete && !isAdmin && location !== "/profile-setup") {
     return <Redirect to="/profile-setup" />;
   }
 
-  // Completed profile but visiting setup page → send to dashboard
   if (isProfileComplete && location === "/profile-setup") {
     return <Redirect to="/dashboard" />;
   }
 
-  // Profile setup page (no Layout wrapper)
   if (location === "/profile-setup") {
     return (
       <Suspense fallback={<PageLoader />}>
@@ -83,6 +108,8 @@ function ProtectedRoutes() {
           <Route path="/admin/quizzes" component={AdminQuizzes} />
           <Route path="/admin/subjects" component={AdminSubjects} />
           <Route path="/admin/admins" component={AdminAdmins} />
+          {/* Bug 4: join link for logged-in users */}
+          <Route path="/join/:code" component={JoinRedirect} />
           <Route component={() => <Redirect to="/dashboard" />} />
         </Switch>
       </Suspense>
@@ -91,11 +118,15 @@ function ProtectedRoutes() {
 }
 
 function App() {
-  // Capture ?code= from URL so it survives the auth redirect into profile-setup
   useEffect(() => {
+    // Capture ?code= query param
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) sessionStorage.setItem("quizora_join_code", code.toUpperCase());
+
+    // Bug 4: also capture /join/CODE path pattern before React routing takes over
+    const joinMatch = window.location.pathname.match(/^\/join\/([A-Z0-9]+)$/i);
+    if (joinMatch) sessionStorage.setItem("quizora_join_code", joinMatch[1].toUpperCase());
   }, []);
 
   return (

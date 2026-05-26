@@ -170,7 +170,8 @@ export default function AdminAdmins() {
   }
 
   function copyLink(code: string) {
-    const url = `${window.location.origin}?code=${code}`;
+    // Bug 4: use clean /join/CODE URL instead of ?code=
+    const url = `${window.location.origin}/join/${code}`;
     navigator.clipboard.writeText(url);
     toast({ title: "Link copied!", description: url });
   }

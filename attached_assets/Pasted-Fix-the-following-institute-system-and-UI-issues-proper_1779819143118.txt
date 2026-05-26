@@ -1,0 +1,160 @@
+Fix the following institute system and UI issues properly.
+
+⸻
+
+BUG 1 — INSTITUTE DATA ISOLATION
+
+Currently admins can see quizzes/students from other institutes.
+
+Fix this completely.
+
+Requirements:
+
+* Super admin can create institute admins using ANY email.
+* Institute admin account should be created automatically on first OTP login.
+
+Institute admins and their students should ONLY see:
+
+* their own institute quizzes
+* their own institute students
+* their own institute leaderboard
+* their own institute analytics
+* their own institute question bank
+
+They must NOT access data from other institutes.
+
+Apply strict institute_id filtering in all Supabase queries.
+
+Filter:
+
+* quizzes
+* questions
+* leaderboard
+* students
+* analytics
+* dashboard cards
+* recent activity
+
+⸻
+
+BUG 2 — SUBJECT FILTERING BY CATEGORY
+
+Currently institute admins can see all subjects from all categories.
+
+Fix this.
+
+Institute admins should ONLY see subjects from their assigned category.
+
+Examples:
+
+Medical PG:
+
+* only medical pg subjects
+
+NEET UG:
+
+* Physics
+* Chemistry
+* Biology
+
+JEE:
+
+* Physics
+* Chemistry
+* Mathematics
+
+Apply filtering everywhere:
+
+* add question
+* create quiz
+* question bank
+* filters
+* topics
+
+⸻
+
+BUG 3 — PROFILE YEAR OPTIONS
+
+Currently MBBS years appear in all categories.
+
+Fix dynamic profile form.
+
+Medical PG:
+
+* 1st Year MBBS
+* 2nd Year MBBS
+* 3rd Year MBBS
+* Final Year MBBS
+* Intern
+* Graduate
+
+NEET UG:
+
+* 11th
+* 12th
+* Dropper
+
+JEE:
+
+* 11th
+* 12th
+* Dropper
+
+Class 10:
+
+* Class 10
+
+Class 12:
+
+* Class 12
+
+Year/class dropdown must change dynamically based on selected category.
+
+⸻
+
+BUG 4 — INSTITUTE STUDENT JOIN LINK
+
+Each institute admin should get a unique institute join link.
+
+Example:
+
+* quizora.com/join/institute-code
+
+Admin can send this link to students.
+
+When student opens the link:
+
+* institute should auto-select
+* category should auto-select
+* student joins that institute automatically after signup
+
+Add:
+
+* copy link button
+* share button
+* institute invite code system
+
+⸻
+
+BUG 5 — ADMIN BUTTON UI ISSUE
+
+Currently admin button/sidebar is getting cut from right side on preview/mobile.
+
+Fix responsive UI properly.
+
+Requirements:
+
+* no overflow outside screen
+* proper spacing and padding
+* responsive sidebar/navbar
+* mobile friendly admin panel
+* buttons should remain fully visible on all screen sizes
+
+Check:
+
+* iPad
+* mobile
+* desktop layouts
+
+Do NOT redesign UI completely.
+Keep current UI style and only fix layout/responsive issues cleanly.

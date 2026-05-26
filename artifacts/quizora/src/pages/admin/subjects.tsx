@@ -12,11 +12,14 @@ interface Subject { id: string; name: string; category_id: string | null; }
 interface Topic { id: string; name: string; subject_id: string; }
 
 export default function AdminSubjects() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isInstituteAdmin, isSuperAdmin, profile } = useAuth();
   const { toast } = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [filterCategory, setFilterCategory] = useState("all");
+  // Bug 2: institute admins start with their category locked; super admins start with "all"
+  const [filterCategory, setFilterCategory] = useState(
+    isInstituteAdmin && profile?.category_id ? profile.category_id : "all"
+  );
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [sLoading, setSLoading] = useState(true);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -30,6 +33,13 @@ export default function AdminSubjects() {
       setCategories((data as Category[]) ?? []);
     });
   }, []);
+
+  // When profile loads, set filter for institute admins
+  useEffect(() => {
+    if (isInstituteAdmin && profile?.category_id && filterCategory === "all") {
+      setFilterCategory(profile.category_id);
+    }
+  }, [profile?.category_id]);
 
   useEffect(() => {
     setSLoading(true);
@@ -77,12 +87,14 @@ export default function AdminSubjects() {
 
   if (!isAdmin) return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
 
+  const currentCategoryName = categories.find(c => c.id === filterCategory)?.name;
+
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Subjects & Topics</h1>
 
-      {/* Category Filter */}
-      {categories.length > 0 && (
+      {/* Category filter — locked for institute admins, full dropdown for super admins */}
+      {isSuperAdmin && categories.length > 0 ? (
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground shrink-0">Filter by:</span>
           <Select value={filterCategory} onValueChange={setFilterCategory}>
@@ -95,14 +107,18 @@ export default function AdminSubjects() {
             </SelectContent>
           </Select>
         </div>
-      )}
+      ) : isInstituteAdmin && currentCategoryName ? (
+        <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary text-sm px-3 py-1.5 rounded-lg">
+          <span className="font-medium">{currentCategoryName}</span>
+          <span className="text-primary/60 text-xs">· Your category</span>
+        </div>
+      ) : null}
 
       <div className="bg-card border border-border rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Subjects ({subjects.length})</h2>
         </div>
 
-        {/* Add subject */}
         <form onSubmit={handleAddSubject} className="flex gap-2">
           <Input
             value={newSubjectName}
@@ -140,13 +156,12 @@ export default function AdminSubjects() {
           <h2 className="font-semibold">Topics for {subjects.find(s => s.id === selectedSubject)?.name}</h2>
           <form onSubmit={handleAddTopic} className="flex gap-2">
             <Input
-              data-testid="input-new-topic"
               value={newTopicName}
               onChange={e => setNewTopicName(e.target.value)}
               placeholder="New topic name"
               className="flex-1"
             />
-            <Button data-testid="button-add-topic" type="submit" disabled={adding}>
+            <Button type="submit" disabled={adding}>
               <Plus className="w-4 h-4 mr-1" /> Add
             </Button>
           </form>

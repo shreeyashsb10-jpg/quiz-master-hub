@@ -14,11 +14,20 @@ export interface Quiz {
   is_premium: boolean;
   created_by: string;
   created_at: string;
+  institute_id?: string | null;
   subjects?: { name: string } | null;
   question_count?: number;
 }
 
-export function useQuizzes(filters?: { type?: string; status?: string; subject_id?: string }) {
+export function useQuizzes(filters?: {
+  type?: string;
+  status?: string;
+  subject_id?: string;
+  // institute_id: shows institute quizzes + public (null) quizzes
+  institute_id?: string | null;
+  // strict_institute: shows ONLY this institute's quizzes (for admin view)
+  strict_institute?: boolean;
+}) {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +40,18 @@ export function useQuizzes(filters?: { type?: string; status?: string; subject_i
       .order("created_at", { ascending: false });
 
     if (filters?.type) q = q.eq("quiz_type", filters.type);
-    
     if (filters?.subject_id) q = q.eq("subject_id", filters.subject_id);
+
+    // Institute isolation
+    if (filters?.institute_id) {
+      if (filters?.strict_institute) {
+        // Admin view: only their institute's quizzes
+        q = q.eq("institute_id", filters.institute_id);
+      } else {
+        // Student view: their institute's quizzes + public (null institute_id)
+        q = q.or(`institute_id.eq.${filters.institute_id},institute_id.is.null`);
+      }
+    }
 
     const { data, error: err } = await q;
     if (err) setError(err.message);
@@ -41,29 +60,12 @@ export function useQuizzes(filters?: { type?: string; status?: string; subject_i
 
       if (filters?.status) {
         const now = new Date();
-
         filtered = filtered.filter((quiz) => {
-          const start = quiz.start_time
-            ? new Date(quiz.start_time)
-            : null;
-
-          const end = quiz.end_time
-            ? new Date(quiz.end_time)
-            : null;
-
+          const start = quiz.start_time ? new Date(quiz.start_time) : null;
+          const end = quiz.end_time ? new Date(quiz.end_time) : null;
           let actualStatus: "upcoming" | "live" | "ended" = "ended";
-
-          if (start && start > now) {
-            actualStatus = "upcoming";
-          } else if (
-            start &&
-            end &&
-            start <= now &&
-            end >= now
-          ) {
-            actualStatus = "live";
-          }
-
+          if (start && start > now) actualStatus = "upcoming";
+          else if (start && end && start <= now && end >= now) actualStatus = "live";
           return actualStatus === filters.status;
         });
       }
@@ -71,7 +73,7 @@ export function useQuizzes(filters?: { type?: string; status?: string; subject_i
       setQuizzes(filtered);
     }
     setLoading(false);
-  }, [filters?.type, filters?.status, filters?.subject_id]);
+  }, [filters?.type, filters?.status, filters?.subject_id, filters?.institute_id, filters?.strict_institute]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

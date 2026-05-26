@@ -19,6 +19,7 @@ interface Quiz {
   end_time: string | null;
   duration_minutes: number;
   is_premium: boolean;
+  institute_id?: string | null;
   subjects?: { name: string } | null;
 }
 
@@ -34,8 +35,9 @@ interface Question {
 const QUESTION_SELECT = "id, question_text, subject_id, topic_id, topics(name), subjects(name)";
 
 export default function AdminQuizzes() {
-  const { profile, user, isAdmin } = useAuth();
-  const { subjects } = useSubjects();
+  const { profile, user, isAdmin, isInstituteAdmin } = useAuth();
+  // Bug 2: filter subjects by admin's category
+  const { subjects } = useSubjects(profile?.category_id);
   const { toast } = useToast();
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -43,7 +45,6 @@ export default function AdminQuizzes() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [subjectId, setSubjectId] = useState("none");
@@ -54,23 +55,34 @@ export default function AdminQuizzes() {
   const [isPremium, setIsPremium] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Question picker (modal)
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [quizQuestionIds, setQuizQuestionIds] = useState<Set<string>>(new Set());
   const [searchQ, setSearchQ] = useState("");
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
 
-  // Picker filters (shared for both form & modal via context of use)
   const [pickerSubject, setPickerSubject] = useState("all");
   const [pickerTopic, setPickerTopic] = useState("all");
   const [formPickerSubject, setFormPickerSubject] = useState("all");
   const [formPickerTopic, setFormPickerTopic] = useState("all");
   const [formSearchQ, setFormSearchQ] = useState("");
 
+  // Bug 1: build institute-scoped query helper
+  function applyInstituteFilter<T>(q: T & { eq: (col: string, val: string) => T }): T {
+    if (isInstituteAdmin && profile?.institute_id) {
+      return q.eq("institute_id", profile.institute_id);
+    }
+    return q;
+  }
+
   async function loadQuizzes() {
     setLoading(true);
-    const { data } = await supabase.from("quizzes").select("*, subjects(name)").order("created_at", { ascending: false });
+    let q = supabase.from("quizzes").select("*, subjects(name)").order("created_at", { ascending: false });
+    // Bug 1: institute admins only see their own quizzes
+    if (isInstituteAdmin && profile?.institute_id) {
+      q = q.eq("institute_id", profile.institute_id);
+    }
+    const { data } = await q;
     setQuizzes((data as Quiz[]) ?? []);
     setLoading(false);
   }
@@ -81,7 +93,12 @@ export default function AdminQuizzes() {
   }, []);
 
   async function loadAllQuestions() {
-    const { data } = await supabase.from("questions").select(QUESTION_SELECT).limit(500);
+    let q = supabase.from("questions").select(QUESTION_SELECT).limit(500);
+    // Bug 1: institute admins only see their own questions
+    if (isInstituteAdmin && profile?.institute_id) {
+      q = q.eq("institute_id", profile.institute_id);
+    }
+    const { data } = await q;
     setAllQuestions((data as unknown as Question[]) ?? []);
   }
 
@@ -90,8 +107,12 @@ export default function AdminQuizzes() {
     setPickerSubject("all");
     setPickerTopic("all");
     setSearchQ("");
+    let qQuery = supabase.from("questions").select(QUESTION_SELECT).limit(500);
+    if (isInstituteAdmin && profile?.institute_id) {
+      qQuery = qQuery.eq("institute_id", profile.institute_id);
+    }
     const [{ data: qs }, { data: qq }] = await Promise.all([
-      supabase.from("questions").select(QUESTION_SELECT).limit(500),
+      qQuery,
       supabase.from("quiz_questions").select("question_id").eq("quiz_id", quizId),
     ]);
     setAllQuestions((qs as unknown as Question[]) ?? []);
@@ -122,16 +143,8 @@ export default function AdminQuizzes() {
     setDescription(quiz.description ?? "");
     setSubjectId(quiz.subject_id ?? "none");
     setQuizType(quiz.quiz_type);
-    setStartTime(
-      quiz.start_time
-        ? new Date(new Date(quiz.start_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-        : ""
-    );
-    setEndTime(
-      quiz.end_time
-        ? new Date(new Date(quiz.end_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-        : ""
-    );
+    setStartTime(quiz.start_time ? new Date(new Date(quiz.start_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
+    setEndTime(quiz.end_time ? new Date(new Date(quiz.end_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
     setDuration(String(quiz.duration_minutes));
     setIsPremium(quiz.is_premium);
     setEditingId(quiz.id);
@@ -142,7 +155,7 @@ export default function AdminQuizzes() {
     e.preventDefault();
     if (!title.trim() || !user) return;
     setSaving(true);
-    const payload = {
+    const payload: Record<string, unknown> = {
       title: title.trim(),
       description: description || null,
       subject_id: subjectId === "none" ? null : subjectId,
@@ -153,6 +166,11 @@ export default function AdminQuizzes() {
       duration_minutes: parseInt(duration) || 30,
       is_premium: isPremium,
     };
+
+    // Bug 1: tag quiz with institute_id for institute admins
+    if (isInstituteAdmin && profile?.institute_id) {
+      payload.institute_id = profile.institute_id;
+    }
 
     if (editingId) {
       await supabase.from("quizzes").update(payload).eq("id", editingId);
@@ -176,7 +194,7 @@ export default function AdminQuizzes() {
         );
       }
 
-      toast({ title: "Quiz created with questions!" });
+      toast({ title: "Quiz created!" });
     }
 
     resetForm(); setShowForm(false); loadQuizzes(); setSaving(false);
@@ -196,17 +214,11 @@ export default function AdminQuizzes() {
 
   if (!isAdmin) return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
 
-  // --- Modal picker derived data ---
-  const modalSubjectFiltered = pickerSubject === "all"
-    ? allQuestions
-    : allQuestions.filter(q => q.subject_id === pickerSubject);
-
+  const modalSubjectFiltered = pickerSubject === "all" ? allQuestions : allQuestions.filter(q => q.subject_id === pickerSubject);
   const modalTopics = useMemo(() => {
     const seen = new Map<string, string>();
     for (const q of modalSubjectFiltered) {
-      if (q.topic_id && q.topics?.name && !seen.has(q.topic_id)) {
-        seen.set(q.topic_id, q.topics.name);
-      }
+      if (q.topic_id && q.topics?.name && !seen.has(q.topic_id)) seen.set(q.topic_id, q.topics.name);
     }
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
   }, [modalSubjectFiltered]);
@@ -217,17 +229,11 @@ export default function AdminQuizzes() {
     return true;
   });
 
-  // --- Form picker derived data ---
-  const formSubjectFiltered = formPickerSubject === "all"
-    ? allQuestions
-    : allQuestions.filter(q => q.subject_id === formPickerSubject);
-
+  const formSubjectFiltered = formPickerSubject === "all" ? allQuestions : allQuestions.filter(q => q.subject_id === formPickerSubject);
   const formTopics = useMemo(() => {
     const seen = new Map<string, string>();
     for (const q of formSubjectFiltered) {
-      if (q.topic_id && q.topics?.name && !seen.has(q.topic_id)) {
-        seen.set(q.topic_id, q.topics.name);
-      }
+      if (q.topic_id && q.topics?.name && !seen.has(q.topic_id)) seen.set(q.topic_id, q.topics.name);
     }
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
   }, [formSubjectFiltered]);
@@ -238,18 +244,11 @@ export default function AdminQuizzes() {
     return true;
   });
 
-  function handleModalSubjectChange(val: string) {
-    setPickerSubject(val);
-    setPickerTopic("all");
-  }
-
+  function handleModalSubjectChange(val: string) { setPickerSubject(val); setPickerTopic("all"); }
   function handleModalTopicChange(val: string) {
     setPickerTopic(val);
     if (val !== "all") {
-      const topicQIds = allQuestions
-        .filter(q => q.topic_id === val)
-        .map(q => q.id)
-        .filter(id => !quizQuestionIds.has(id));
+      const topicQIds = allQuestions.filter(q => q.topic_id === val).map(q => q.id).filter(id => !quizQuestionIds.has(id));
       if (topicQIds.length > 0) {
         topicQIds.forEach(async (qid) => {
           await supabase.from("quiz_questions").insert({ quiz_id: selectedQuizId, question_id: qid, order_index: quizQuestionIds.size });
@@ -259,46 +258,35 @@ export default function AdminQuizzes() {
     }
   }
 
-  function handleFormSubjectChange(val: string) {
-    setFormPickerSubject(val);
-    setFormPickerTopic("all");
-  }
-
+  function handleFormSubjectChange(val: string) { setFormPickerSubject(val); setFormPickerTopic("all"); }
   function handleFormTopicChange(val: string) {
     setFormPickerTopic(val);
     if (val !== "all") {
-      const topicQIds = allQuestions
-        .filter(q => q.topic_id === val)
-        .map(q => q.id);
-      setSelectedQuestionIds(prev => {
-        const existing = new Set(prev);
-        const toAdd = topicQIds.filter(id => !existing.has(id));
-        return [...prev, ...toAdd];
-      });
+      const topicQIds = allQuestions.filter(q => q.topic_id === val).map(q => q.id);
+      setSelectedQuestionIds(prev => { const existing = new Set(prev); return [...prev, ...topicQIds.filter(id => !existing.has(id))]; });
     }
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Quizzes</h1>
-        <Button data-testid="button-new-quiz" onClick={() => { resetForm(); setShowForm(true); }}>
+        <Button onClick={() => { resetForm(); setShowForm(true); }}>
           <Plus className="w-4 h-4 mr-2" /> New Quiz
         </Button>
       </div>
 
-      {/* Form */}
       {showForm && (
         <form onSubmit={handleSave} className="bg-card border border-border rounded-xl p-6 space-y-4">
           <h2 className="font-semibold">{editingId ? "Edit Quiz" : "Create Quiz"}</h2>
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1 sm:col-span-2">
               <label className="text-sm font-medium">Title *</label>
-              <Input data-testid="input-quiz-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Anatomy Upper Limb Test" required />
+              <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Anatomy Upper Limb Test" required />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <label className="text-sm font-medium">Description</label>
-              <Input data-testid="input-quiz-desc" value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional description" />
+              <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional description" />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">Subject</label>
@@ -324,17 +312,17 @@ export default function AdminQuizzes() {
               <>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Start Time</label>
-                  <Input data-testid="input-start-time" type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                  <Input type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">End Time</label>
-                  <Input data-testid="input-end-time" type="datetime-local" value={endTime} onChange={e => setEndTime(e.target.value)} />
+                  <Input type="datetime-local" value={endTime} onChange={e => setEndTime(e.target.value)} />
                 </div>
               </>
             )}
             <div className="space-y-1">
               <label className="text-sm font-medium">Duration (minutes)</label>
-              <Input data-testid="input-duration" type="number" value={duration} onChange={e => setDuration(e.target.value)} min="1" max="300" />
+              <Input type="number" value={duration} onChange={e => setDuration(e.target.value)} min="1" max="300" />
             </div>
             <div className="flex items-center gap-2 self-end pb-1">
               <input type="checkbox" id="premium" checked={isPremium} onChange={e => setIsPremium(e.target.checked)} className="rounded" />
@@ -342,7 +330,6 @@ export default function AdminQuizzes() {
             </div>
           </div>
 
-          {/* Form Question Picker */}
           <div className="space-y-3">
             <label className="text-sm font-medium">Select Questions</label>
             <div className="grid grid-cols-2 gap-2">
@@ -353,7 +340,7 @@ export default function AdminQuizzes() {
                   {subjects.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <Select value={formPickerTopic} onValueChange={handleFormTopicChange} disabled={formPickerSubject === "all" && formTopics.length === 0}>
+              <Select value={formPickerTopic} onValueChange={handleFormTopicChange} disabled={formTopics.length === 0}>
                 <SelectTrigger><SelectValue placeholder="All Topics" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Topics</SelectItem>
@@ -369,9 +356,7 @@ export default function AdminQuizzes() {
               {formFilteredQuestions.map(q => {
                 const selected = selectedQuestionIds.includes(q.id);
                 return (
-                  <button
-                    type="button"
-                    key={q.id}
+                  <button type="button" key={q.id}
                     onClick={() => setSelectedQuestionIds(prev => selected ? prev.filter(id => id !== q.id) : [...prev, q.id])}
                     className={`w-full text-left p-3 hover:bg-muted/50 transition-colors ${selected ? "bg-primary/10" : ""}`}
                   >
@@ -381,43 +366,38 @@ export default function AdminQuizzes() {
                       </div>
                       <div>
                         <p className="text-sm line-clamp-2">{q.question_text}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {q.subjects?.name ?? "General"}{q.topics?.name ? ` · ${q.topics.name}` : ""}
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">{q.subjects?.name ?? "General"}{q.topics?.name ? ` · ${q.topics.name}` : ""}</p>
                       </div>
                     </div>
                   </button>
                 );
               })}
-              {formFilteredQuestions.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">No questions found</p>
-              )}
+              {formFilteredQuestions.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No questions found</p>}
             </div>
             <p className="text-xs text-muted-foreground">{selectedQuestionIds.length} questions selected</p>
           </div>
 
           <div className="flex gap-3">
-            <Button data-testid="button-save-quiz" type="submit" disabled={saving}>{saving ? "Saving..." : editingId ? "Update" : "Create Quiz"}</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Saving..." : editingId ? "Update" : "Create Quiz"}</Button>
             <Button variant="outline" type="button" onClick={() => { resetForm(); setShowForm(false); }}>Cancel</Button>
           </div>
         </form>
       )}
 
-      {/* Quiz List */}
       {loading ? (
         <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-card border border-border rounded-xl animate-pulse" />)}</div>
       ) : (
         <div className="space-y-3">
           {quizzes.map(quiz => (
-            <div key={quiz.id} data-testid={`admin-quiz-${quiz.id}`} className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-start justify-between gap-4">
+            <div key={quiz.id} className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium">{quiz.title}</div>
                   <div className="text-sm text-muted-foreground mt-0.5">
                     {quiz.subjects?.name ?? "Mixed"} · {quiz.duration_minutes}m · {quiz.quiz_type}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
                   <Select value={quiz.status} onValueChange={v => updateStatus(quiz.id, v as "upcoming" | "live" | "ended")}>
                     <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -437,15 +417,12 @@ export default function AdminQuizzes() {
         </div>
       )}
 
-      {/* Question Picker Modal */}
       {selectedQuizId && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="font-semibold">Pick Questions ({quizQuestionIds.size} selected)</h2>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedQuizId(null)}>
-                <X className="w-4 h-4" />
-              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedQuizId(null)}><X className="w-4 h-4" /></Button>
             </div>
             <div className="p-4 border-b border-border space-y-2">
               <div className="grid grid-cols-2 gap-2">
@@ -473,9 +450,7 @@ export default function AdminQuizzes() {
               {filteredQuestions.map(q => {
                 const selected = quizQuestionIds.has(q.id);
                 return (
-                  <button
-                    key={q.id}
-                    onClick={() => toggleQuestion(q.id)}
+                  <button key={q.id} onClick={() => toggleQuestion(q.id)}
                     className={`w-full text-left flex items-start gap-3 p-4 hover:bg-muted/50 transition-colors ${selected ? "bg-primary/5" : ""}`}
                   >
                     <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center shrink-0 ${selected ? "bg-primary border-primary" : "border-border"}`}>
@@ -483,16 +458,12 @@ export default function AdminQuizzes() {
                     </div>
                     <div>
                       <p className="text-sm line-clamp-2">{q.question_text}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {q.subjects?.name ?? "General"}{q.topics?.name ? ` · ${q.topics.name}` : ""}
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{q.subjects?.name ?? "General"}{q.topics?.name ? ` · ${q.topics.name}` : ""}</p>
                     </div>
                   </button>
                 );
               })}
-              {filteredQuestions.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-8">No questions found</p>
-              )}
+              {filteredQuestions.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No questions found</p>}
             </div>
             <div className="p-4 border-t border-border">
               <Button className="w-full" onClick={() => setSelectedQuizId(null)}>Done</Button>

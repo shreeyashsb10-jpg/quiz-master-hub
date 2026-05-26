@@ -13,13 +13,18 @@ import { BookOpen, Trophy, Zap, Target, Clock, Users, ChevronRight, Play } from 
 
 export default function Dashboard() {
   const { profile } = useAuth();
-  const { quizzes, loading: qLoading } = useQuizzes();
+
+  // Bug 1: filter quizzes by institute (students see their institute + public quizzes)
+  const { quizzes, loading: qLoading } = useQuizzes({
+    institute_id: profile?.institute_id ?? undefined,
+  });
+
+  // Bug 2: filter subjects by student's category
   const { subjects, loading: sLoading } = useSubjects(profile?.category_id);
   const { attempts } = useMyAttempts();
   const { entries: leaderboard } = useLeaderboard("global");
   const [, setTick] = useState(0);
 
-  // Refresh countdown timers every second
   useEffect(() => {
     const t = setInterval(() => setTick(n => n + 1), 1000);
     return () => clearInterval(t);
@@ -29,37 +34,31 @@ export default function Dashboard() {
 
   const liveQuizzes = quizzes.filter(q => {
     if (!q.start_time || !q.end_time) return false;
-
-    return (
-      new Date(q.start_time).getTime() <= now &&
-      new Date(q.end_time).getTime() >= now
-    );
+    return new Date(q.start_time).getTime() <= now && new Date(q.end_time).getTime() >= now;
   });
 
   const upcomingQuizzes = quizzes.filter(q => {
     if (!q.start_time) return false;
-
     return new Date(q.start_time).getTime() > now;
   });
 
   const recentQuizzes = quizzes.filter(q => {
     if (!q.end_time) return false;
-
     return new Date(q.end_time).getTime() < now;
   }).slice(0, 3);
-  
+
   const totalAttempted = attempts.length;
   const avgAccuracy = attempts.length
     ? Math.round(attempts.reduce((sum, a) => sum + calcAccuracy(a.correct_answers, a.total_questions), 0) / attempts.length)
     : 0;
 
   return (
-    <div className="space-y-8 p-6 max-w-7xl mx-auto">
+    <div className="space-y-8 p-4 md:p-6 max-w-7xl mx-auto">
       {/* Welcome header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">
-            Welcome back, {profile?.full_name?.split(" ")[0] ?? "Doctor"} 👋
+            Welcome back, {profile?.full_name?.split(" ")[0] ?? "Student"} 👋
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {profile?.institute_name ?? profile?.college_name ?? "Student"}{profile?.academic_year ? ` • ${profile.academic_year}` : profile?.mbbs_year ? ` • ${profile.mbbs_year}` : ""}
@@ -74,7 +73,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
         {[
           { label: "Total Points", value: profile?.total_points ?? 0, icon: Trophy, color: "text-amber-400" },
           { label: "Streak", value: `${profile?.streak ?? 0} days`, icon: Zap, color: "text-orange-400" },
@@ -87,9 +86,7 @@ export default function Dashboard() {
               <stat.icon className={`w-4 h-4 ${stat.color}`} />
               <span className="text-xs text-muted-foreground">{stat.label}</span>
             </div>
-            <div className="text-xl font-bold" data-testid={`stat-${stat.label.toLowerCase().replace(/\s/g, "-")}`}>
-              {stat.value}
-            </div>
+            <div className="text-xl font-bold">{stat.value}</div>
           </div>
         ))}
       </div>
@@ -112,40 +109,27 @@ export default function Dashboard() {
           </div>
         ) : liveQuizzes.length === 0 ? (
           <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
-            No live or upcoming quizzes right now. Check back soon!
+            No live quizzes right now. Check back soon!
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {liveQuizzes.slice(0, 6).map(quiz => {
               const statusInfo = getQuizStatusInfo(quiz.status, quiz.start_time, quiz.end_time);
               return (
-                <div key={quiz.id} data-testid={`card-quiz-${quiz.id}`} className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3">
+                <div key={quiz.id} className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusInfo.bg} ${statusInfo.color}`}>
-                        {statusInfo.label}
-                      </span>
-                    </div>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusInfo.bg} ${statusInfo.color}`}>{statusInfo.label}</span>
                     <span className="text-xs text-muted-foreground">{quiz.duration_minutes}m</span>
                   </div>
                   <div>
                     <h3 className="font-semibold leading-tight">{quiz.title}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {quiz.subjects?.name ?? "Mixed Subject"}
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">{quiz.subjects?.name ?? "Mixed Subject"}</p>
                   </div>
-                  {quiz.start_time && statusInfo.label === "Upcoming" && (
-                    <div className="text-xs text-amber-400 font-mono">
-                      Starts in {formatCountdown(quiz.start_time ?? "")}
-                    </div>
-                  )}
                   {quiz.end_time && statusInfo.label === "Live" && (
-                    <div className="text-xs text-emerald-400 font-mono">
-                      Ends in {formatCountdown(quiz.end_time)}
-                    </div>
+                    <div className="text-xs text-emerald-400 font-mono">Ends in {formatCountdown(quiz.end_time)}</div>
                   )}
                   <Link href={`/quiz/${quiz.id}`}>
-                    <Button data-testid={`button-join-${quiz.id}`} className="w-full" size="sm">
+                    <Button className="w-full" size="sm">
                       <Play className="w-3 h-3 mr-1" />
                       {statusInfo.label === "Upcoming" ? "View" : "Join Now"}
                     </Button>
@@ -156,83 +140,45 @@ export default function Dashboard() {
           </div>
         )}
       </div>
-      {/* Upcoming Quizzes */}
-      <div>
-        <div className="flex items-center justify-between mb-4 mt-8">
-          <h2 className="text-lg font-semibold">
-            Upcoming Quizzes
-          </h2>
-        </div>
 
-        {upcomingQuizzes.length === 0 ? (
-          <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
-            No upcoming quizzes
-          </div>
-        ) : (
+      {/* Upcoming Quizzes */}
+      {upcomingQuizzes.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Upcoming Quizzes</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {upcomingQuizzes.slice(0, 6).map(quiz => (
-              <div
-                key={quiz.id}
-                className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3"
-              >
-                <Badge className="w-fit">
-                  Upcoming
-                </Badge>
-
+              <div key={quiz.id} className="bg-card border border-border rounded-xl p-5 flex flex-col gap-3">
+                <Badge className="w-fit">Upcoming</Badge>
                 <div>
-                  <h3 className="font-semibold leading-tight">
-                    {quiz.title}
-                  </h3>
-
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {quiz.subjects?.name ?? "Mixed Subject"}
-                  </p>
+                  <h3 className="font-semibold leading-tight">{quiz.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{quiz.subjects?.name ?? "Mixed Subject"}</p>
                 </div>
-
-                <div className="text-xs text-amber-400 font-mono">
-                  Starts in {formatCountdown(quiz.start_time ?? "")}
-                </div>
-
+                <div className="text-xs text-amber-400 font-mono">Starts in {formatCountdown(quiz.start_time ?? "")}</div>
                 <Link href={`/quiz/${quiz.id}`}>
-                  <Button className="w-full" size="sm" variant="outline">
-                    View Quiz
-                  </Button>
+                  <Button className="w-full" size="sm" variant="outline">View Quiz</Button>
                 </Link>
               </div>
             ))}
           </div>
-        )}
-      </div>
-      {/* Recent Quizzes */}
-      <div>
-        <div className="flex items-center justify-between mb-4 mt-8">
-          <h2 className="text-lg font-semibold">
-            Recent Quizzes
-          </h2>
         </div>
+      )}
 
-        {recentQuizzes.length === 0 ? (
-          <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
-            No recent quizzes
-          </div>
-        ) : (
+      {/* Recent Quizzes */}
+      {recentQuizzes.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Recent Quizzes</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {recentQuizzes.map(quiz => (
               <Link key={quiz.id} href={`/quiz/${quiz.id}`}>
                 <div className="bg-card border border-border rounded-xl p-5 cursor-pointer hover:border-primary/40 transition-colors">
-                  <h3 className="font-semibold">
-                    {quiz.title}
-                  </h3>
-
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {quiz.subjects?.name ?? "Mixed Subject"}
-                  </p>
+                  <h3 className="font-semibold">{quiz.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{quiz.subjects?.name ?? "Mixed Subject"}</p>
                 </div>
               </Link>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Subjects Grid */}
@@ -251,11 +197,14 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {subjects.slice(0, 9).map(subject => (
                 <Link key={subject.id} href={`/quizzes?subject=${subject.id}`}>
-                  <div data-testid={`card-subject-${subject.id}`} className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-primary/50 transition-colors">
+                  <div className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-primary/50 transition-colors">
                     <div className="font-medium text-sm leading-tight">{subject.name}</div>
                   </div>
                 </Link>
               ))}
+              {subjects.length === 0 && (
+                <p className="text-sm text-muted-foreground col-span-3 py-4 text-center">No subjects available yet.</p>
+              )}
             </div>
           )}
         </div>
@@ -304,15 +253,11 @@ export default function Dashboard() {
               <div key={attempt.id} className="flex items-center justify-between p-4">
                 <div>
                   <div className="font-medium text-sm">{attempt.quizzes?.title ?? "Quiz"}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(attempt.submitted_at).toLocaleDateString()}
-                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{new Date(attempt.submitted_at).toLocaleDateString()}</div>
                 </div>
                 <div className="text-right">
                   <div className="font-semibold text-sm">{attempt.score} pts</div>
-                  <div className="text-xs text-muted-foreground">
-                    {calcAccuracy(attempt.correct_answers, attempt.total_questions)}% accuracy
-                  </div>
+                  <div className="text-xs text-muted-foreground">{calcAccuracy(attempt.correct_answers, attempt.total_questions)}% accuracy</div>
                 </div>
               </div>
             ))}

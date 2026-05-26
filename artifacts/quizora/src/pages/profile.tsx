@@ -13,14 +13,14 @@ import { LogOut, Camera } from "lucide-react";
 interface Category { id: string; name: string; slug: string; icon: string | null; }
 
 export default function ProfilePage() {
-  const { profile, user, signOut, refreshProfile, isAdmin } = useAuth();
+  const { profile, user, signOut, refreshProfile, isSuperAdmin } = useAuth();
   const { attempts } = useMyAttempts();
   const { toast } = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [collegeName, setCollegeName] = useState(profile?.institute_name ?? profile?.college_name ?? "");
-  const [mbbsYear, setMbbsYear] = useState(profile?.academic_year ?? profile?.mbbs_year ?? "");
+  const [academicYear, setAcademicYear] = useState(profile?.academic_year ?? profile?.mbbs_year ?? "");
   const [categoryId, setCategoryId] = useState(profile?.category_id ?? "");
   const [categorySlug, setCategorySlug] = useState("");
   const [examType, setExamType] = useState(profile?.exam_type ?? "");
@@ -39,6 +39,7 @@ export default function ProfilePage() {
   function handleCategoryChange(id: string) {
     setCategoryId(id);
     setExamType("");
+    setAcademicYear("");
     const cat = categories.find(c => c.id === id);
     setCategorySlug(cat?.slug ?? "");
   }
@@ -52,9 +53,9 @@ export default function ProfilePage() {
     const { error } = await supabase.from("users").update({
       full_name: fullName,
       college_name: collegeName,
-      mbbs_year: mbbsYear,
+      mbbs_year: academicYear,
       institute_name: collegeName || null,
-      academic_year: mbbsYear || null,
+      academic_year: academicYear || null,
       category_id: categoryId || null,
       exam_type: examType || null,
       updated_at: new Date().toISOString(),
@@ -89,7 +90,7 @@ export default function ProfilePage() {
   const categoryName = categories.find(c => c.id === categoryId)?.name;
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-8">
+    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Profile</h1>
         <Button variant="outline" size="sm" onClick={signOut}>
@@ -132,23 +133,29 @@ export default function ProfilePage() {
 
       <form onSubmit={handleSave} className="bg-card border border-border rounded-2xl p-6 space-y-4">
         <h2 className="font-semibold text-lg">Edit Profile</h2>
+
         <div className="space-y-1">
           <label className="text-sm font-medium">Full Name</label>
           <Input data-testid="input-full-name" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your Name" />
         </div>
 
-        {categories.length > 0 && !isAdmin && (
+        {/* Category — shown for everyone (super admins can change, others see theirs) */}
+        {categories.length > 0 && (
           <div className="space-y-1">
             <label className="text-sm font-medium">Category</label>
-            <Select value={categoryId} onValueChange={handleCategoryChange}>
+            <Select value={categoryId} onValueChange={handleCategoryChange} disabled={!isSuperAdmin && !!profile?.institute_id}>
               <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
               <SelectContent>
                 {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            {!isSuperAdmin && !!profile?.institute_id && (
+              <p className="text-xs text-muted-foreground">Category set by your institute</p>
+            )}
           </div>
         )}
 
+        {/* Exam type — only when category has multiple exam types */}
         {meta && meta.examTypes.length > 1 && (
           <div className="space-y-1">
             <label className="text-sm font-medium">Exam Type</label>
@@ -161,22 +168,21 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {meta && (
+        {/* Year / Class — dropdown when category is known, text input as fallback */}
+        {meta ? (
           <div className="space-y-1">
             <label className="text-sm font-medium">Year / Class</label>
-            <Select value={mbbsYear} onValueChange={setMbbsYear}>
+            <Select value={academicYear} onValueChange={setAcademicYear}>
               <SelectTrigger><SelectValue placeholder="Select year/class" /></SelectTrigger>
               <SelectContent>
                 {meta.yearOptions.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-        )}
-
-        {(!meta || isAdmin) && (
+        ) : (
           <div className="space-y-1">
-            <label className="text-sm font-medium">{isAdmin ? "MBBS Year" : "Year / Class"}</label>
-            <Input data-testid="input-mbbs-year" value={mbbsYear} onChange={e => setMbbsYear(e.target.value)} placeholder="e.g. 3rd Year, Intern..." />
+            <label className="text-sm font-medium">Year / Class</label>
+            <Input data-testid="input-mbbs-year" value={academicYear} onChange={e => setAcademicYear(e.target.value)} placeholder="e.g. 3rd Year, Intern..." />
           </div>
         )}
 
