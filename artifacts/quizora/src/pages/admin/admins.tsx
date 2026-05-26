@@ -48,7 +48,7 @@ export default function AdminAdmins() {
   const [foundUser, setFoundUser] = useState<AdminUser | null>(null);
   const [searchDone, setSearchDone] = useState(false);
   const [promoteRole, setPromoteRole] = useState<"institute_admin" | "super_admin">("institute_admin");
-  const [promoteInstitute, setPromoteInstitute] = useState("");
+  const [promoteInstituteId, setPromoteInstituteId] = useState("");
   const [promoteCategoryId, setPromoteCategoryId] = useState("");
   const [promoting, setPromoting] = useState(false);
 
@@ -95,7 +95,6 @@ export default function AdminAdmins() {
     setFoundUser(data as AdminUser ?? null);
     setSearchDone(true);
     if (data) {
-      setPromoteInstitute((data as AdminUser).institute_name ?? "");
       setPromoteCategoryId((data as AdminUser).category_id ?? "");
     }
     setSearching(false);
@@ -104,17 +103,19 @@ export default function AdminAdmins() {
   async function handlePromote() {
     if (!foundUser) return;
     setPromoting(true);
+    const selectedInst = institutes.find(i => i.id === promoteInstituteId) ?? null;
     const { error } = await supabase.from("users").update({
       role: promoteRole,
-      institute_name: promoteInstitute.trim() || null,
-      category_id: promoteCategoryId || null,
+      institute_id: selectedInst?.id ?? null,
+      institute_name: selectedInst?.name ?? null,
+      category_id: promoteCategoryId || selectedInst?.category_id || null,
       updated_at: new Date().toISOString(),
     }).eq("id", foundUser.id);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: `${foundUser.email} is now ${promoteRole === "super_admin" ? "Super Admin" : "Institute Admin"}` });
-      setFoundUser(null); setSearchEmail(""); setSearchDone(false);
+      setFoundUser(null); setSearchEmail(""); setSearchDone(false); setPromoteInstituteId("");
       await loadAdmins();
     }
     setPromoting(false);
@@ -349,31 +350,52 @@ export default function AdminAdmins() {
                 <div className="text-xs text-primary mt-0.5 capitalize">{foundUser.role}</div>
               </div>
             </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Admin Role</label>
-                <Select value={promoteRole} onValueChange={v => setPromoteRole(v as typeof promoteRole)}>
-                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="institute_admin">Institute Admin</SelectItem>
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Category</label>
-                <Select value={promoteCategoryId || "_all"} onValueChange={v => setPromoteCategoryId(v === "_all" ? "" : v)}>
-                  <SelectTrigger className="h-10"><SelectValue placeholder="Select category" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_all">All Categories</SelectItem>
-                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Institute / Coaching Name</label>
-              <Input value={promoteInstitute} onChange={e => setPromoteInstitute(e.target.value)} placeholder="e.g. Allen Kota" className="h-10" />
+              <label className="text-sm font-medium">Admin Role</label>
+              <Select value={promoteRole} onValueChange={v => setPromoteRole(v as typeof promoteRole)}>
+                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="institute_admin">Institute Admin</SelectItem>
+                  <SelectItem value="super_admin">Super Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Institute / Coaching</label>
+              <Select
+                value={promoteInstituteId || "_none"}
+                onValueChange={v => {
+                  const id = v === "_none" ? "" : v;
+                  setPromoteInstituteId(id);
+                  const inst = institutes.find(i => i.id === id);
+                  if (inst?.category_id) setPromoteCategoryId(inst.category_id);
+                }}
+              >
+                <SelectTrigger className="h-10"><SelectValue placeholder="Select institute (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">No institute / Super Admin</SelectItem>
+                  {institutes.map(inst => (
+                    <SelectItem key={inst.id} value={inst.id}>
+                      {inst.name}{inst.join_code ? ` — ${inst.join_code}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {institutes.length === 0 && (
+                <p className="text-xs text-muted-foreground">No institutes yet — create one in the Institutes section above first.</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Category <span className="text-muted-foreground font-normal">(auto-filled from institute)</span></label>
+              <Select value={promoteCategoryId || "_all"} onValueChange={v => setPromoteCategoryId(v === "_all" ? "" : v)}>
+                <SelectTrigger className="h-10"><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All Categories</SelectItem>
+                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <Button onClick={handlePromote} disabled={promoting} className="w-full">
               <ShieldCheck className="w-4 h-4 mr-2" />
