@@ -218,12 +218,12 @@ export default function AdminAdmins() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground">Category</label>
-                <Select value={instCategoryId} onValueChange={setInstCategoryId}>
+                <Select value={instCategoryId || "_all"} onValueChange={v => setInstCategoryId(v === "_all" ? "" : v)}>
                   <SelectTrigger className="h-10">
                     <SelectValue placeholder="All categories" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All categories</SelectItem>
+                    <SelectItem value="_all">All categories</SelectItem>
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -362,10 +362,10 @@ export default function AdminAdmins() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Category</label>
-                <Select value={promoteCategoryId} onValueChange={setPromoteCategoryId}>
+                <Select value={promoteCategoryId || "_all"} onValueChange={v => setPromoteCategoryId(v === "_all" ? "" : v)}>
                   <SelectTrigger className="h-10"><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Categories</SelectItem>
+                    <SelectItem value="_all">All Categories</SelectItem>
                     {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
