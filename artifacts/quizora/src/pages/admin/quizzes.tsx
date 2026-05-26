@@ -34,7 +34,7 @@ interface Question {
 const QUESTION_SELECT = "id, question_text, subject_id, topic_id, topics(name), subjects(name)";
 
 export default function AdminQuizzes() {
-  const { profile, user } = useAuth();
+  const { profile, user, isAdmin } = useAuth();
   const { subjects } = useSubjects();
   const { toast } = useToast();
 
@@ -194,7 +194,7 @@ export default function AdminQuizzes() {
     toast({ title: `Quiz marked as ${status}` });
   }
 
-  if (profile?.role !== "admin") return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
+  if (!isAdmin) return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
 
   // --- Modal picker derived data ---
   const modalSubjectFiltered = pickerSubject === "all"

@@ -14,7 +14,7 @@ import { BookOpen, Trophy, Zap, Target, Clock, Users, ChevronRight, Play } from 
 export default function Dashboard() {
   const { profile } = useAuth();
   const { quizzes, loading: qLoading } = useQuizzes();
-  const { subjects, loading: sLoading } = useSubjects();
+  const { subjects, loading: sLoading } = useSubjects(profile?.category_id);
   const { attempts } = useMyAttempts();
   const { entries: leaderboard } = useLeaderboard("global");
   const [, setTick] = useState(0);
@@ -62,7 +62,7 @@ export default function Dashboard() {
             Welcome back, {profile?.full_name?.split(" ")[0] ?? "Doctor"} 👋
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {profile?.college_name ?? "MBBS Student"} • {profile?.mbbs_year ?? ""}
+            {profile?.institute_name ?? profile?.college_name ?? "Student"}{profile?.academic_year ? ` • ${profile.academic_year}` : profile?.mbbs_year ? ` • ${profile.mbbs_year}` : ""}
           </p>
         </div>
         <Link href="/profile">

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,24 +7,22 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { QuizGuardProvider } from "@/contexts/QuizGuardContext";
 import Layout from "@/components/Layout";
 
-// Lazy-load every page so the initial bundle only contains the shell
-const AuthPage       = lazy(() => import("@/pages/auth"));
-const Dashboard      = lazy(() => import("@/pages/dashboard"));
-const QuizzesPage    = lazy(() => import("@/pages/quizzes"));
-const QuizDetail     = lazy(() => import("@/pages/quiz-detail"));
+const AuthPage        = lazy(() => import("@/pages/auth"));
+const ProfileSetup    = lazy(() => import("@/pages/profile-setup"));
+const Dashboard       = lazy(() => import("@/pages/dashboard"));
+const QuizzesPage     = lazy(() => import("@/pages/quizzes"));
+const QuizDetail      = lazy(() => import("@/pages/quiz-detail"));
 const LeaderboardPage = lazy(() => import("@/pages/leaderboard"));
-const ProfilePage    = lazy(() => import("@/pages/profile"));
-const AdminDashboard = lazy(() => import("@/pages/admin/index"));
-const AdminQuestions = lazy(() => import("@/pages/admin/questions"));
-const AdminQuizzes   = lazy(() => import("@/pages/admin/quizzes"));
-const AdminSubjects  = lazy(() => import("@/pages/admin/subjects"));
-const NotFound       = lazy(() => import("@/pages/not-found"));
+const ProfilePage     = lazy(() => import("@/pages/profile"));
+const AdminDashboard  = lazy(() => import("@/pages/admin/index"));
+const AdminQuestions  = lazy(() => import("@/pages/admin/questions"));
+const AdminQuizzes    = lazy(() => import("@/pages/admin/quizzes"));
+const AdminSubjects   = lazy(() => import("@/pages/admin/subjects"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
 });
 
-// Minimal inline spinner used only while lazy chunks download (< 200 ms typically)
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -34,18 +32,10 @@ function PageLoader() {
 }
 
 function ProtectedRoutes() {
-  const { user, loading, profile } = useAuth();
+  const { user, loading, isAdmin, isProfileComplete } = useAuth();
+  const [location] = useLocation();
 
-  // Show spinner ONLY while validating a stored session — not for fresh visitors
   if (loading) return <PageLoader />;
-  if (
-    user &&
-    profile &&
-    (!profile.full_name || profile.full_name === "Anonymous") &&
-    window.location.pathname !== "/profile"
-  ) {
-    return <Redirect to="/profile" />;
-  }
 
   if (!user) {
     return (
@@ -54,6 +44,25 @@ function ProtectedRoutes() {
           <Route path="/auth" component={AuthPage} />
           <Route><Redirect to="/auth" /></Route>
         </Switch>
+      </Suspense>
+    );
+  }
+
+  // Student with incomplete profile → force setup (but not while already on setup page)
+  if (!isProfileComplete && !isAdmin && location !== "/profile-setup") {
+    return <Redirect to="/profile-setup" />;
+  }
+
+  // Completed profile but visiting setup page → send to dashboard
+  if (isProfileComplete && location === "/profile-setup") {
+    return <Redirect to="/dashboard" />;
+  }
+
+  // Profile setup page (no Layout wrapper)
+  if (location === "/profile-setup") {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ProfileSetup />
       </Suspense>
     );
   }
@@ -72,11 +81,7 @@ function ProtectedRoutes() {
           <Route path="/admin/questions" component={AdminQuestions} />
           <Route path="/admin/quizzes" component={AdminQuizzes} />
           <Route path="/admin/subjects" component={AdminSubjects} />
-          <Route>
-            <Redirect to="/dashboard" />
-          </Route>
-
-    
+          <Route component={() => <Redirect to="/dashboard" />} />
         </Switch>
       </Suspense>
     </Layout>
@@ -89,9 +94,9 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <QuizGuardProvider>
-          <WouterRouter>
-            <ProtectedRoutes />
-          </WouterRouter>
+            <WouterRouter>
+              <ProtectedRoutes />
+            </WouterRouter>
           </QuizGuardProvider>
           <Toaster />
         </AuthProvider>

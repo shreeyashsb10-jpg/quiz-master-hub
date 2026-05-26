@@ -1,19 +1,49 @@
 -- ============================================================
--- QUIZORA — Supabase Schema
+-- QUIZORA — Supabase Schema (Multi-Category SaaS)
 -- Run this in Supabase SQL Editor to set up the database
+-- For existing databases, run supabase-migration.sql instead
 -- ============================================================
 
--- Enable UUID extension
 create extension if not exists "uuid-ossp";
+
+-- ============================================================
+-- CATEGORIES
+-- ============================================================
+create table if not exists categories (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  slug text not null unique,
+  icon text,
+  created_at timestamptz default now()
+);
+
+insert into categories (name, slug, icon) values
+  ('Medical PG', 'medical-pg', '🏥'),
+  ('NEET UG',    'neet-ug',    '🔬'),
+  ('JEE',        'jee',        '⚛️'),
+  ('Class 10',   'class-10',   '📚'),
+  ('Class 12',   'class-12',   '🎓')
+on conflict (slug) do nothing;
+
+-- ============================================================
+-- INSTITUTES
+-- ============================================================
+create table if not exists institutes (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  category_id uuid references categories(id) on delete set null,
+  created_at timestamptz default now()
+);
 
 -- ============================================================
 -- SUBJECTS
 -- ============================================================
 create table if not exists subjects (
   id uuid default uuid_generate_v4() primary key,
-  name text not null unique,
+  name text not null,
   description text,
   icon text,
+  category_id uuid references categories(id) on delete set null,
   created_at timestamptz default now()
 );
 
@@ -30,13 +60,14 @@ create table if not exists topics (
 
 -- ============================================================
 -- USERS (extends Supabase auth.users)
+-- Roles: 'user' (student), 'admin'/'super_admin', 'institute_admin'
 -- ============================================================
 create table if not exists users (
   id uuid references auth.users(id) on delete cascade primary key,
   email text not null,
   full_name text,
-  college_name text,
-  mbbs_year text,
+  college_name text,        -- legacy; maps to institute_name
+  mbbs_year text,           -- legacy; maps to academic_year
   avatar_url text,
   plan_type text default 'free' check (plan_type in ('free', 'pro')),
   subscription_status text check (subscription_status in ('active', 'inactive')),
@@ -45,7 +76,13 @@ create table if not exists users (
   total_points integer default 0,
   weekly_points integer default 0,
   streak integer default 0,
-  role text default 'user' check (role in ('user', 'admin')),
+  role text default 'user' check (role in ('user', 'admin', 'super_admin', 'institute_admin')),
+  -- multi-category SaaS fields
+  category_id uuid references categories(id) on delete set null,
+  exam_type text,           -- e.g. 'NEET PG', 'JEE Main'
+  academic_year text,       -- e.g. '3rd Year MBBS', 'Class 12'
+  institute_name text,      -- college / coaching institute
+  institute_id uuid references institutes(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -83,19 +120,19 @@ create table if not exists quizzes (
   end_time timestamptz,
   duration_minutes integer default 30,
   is_premium boolean default false,
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
 -- ============================================================
--- QUIZ QUESTIONS (junction)
+-- QUIZ QUESTIONS (join table)
 -- ============================================================
 create table if not exists quiz_questions (
   id uuid default uuid_generate_v4() primary key,
   quiz_id uuid references quizzes(id) on delete cascade not null,
   question_id uuid references questions(id) on delete cascade not null,
-  order_index integer default 0,
+  order_index integer not null default 0,
   unique(quiz_id, question_id)
 );
 
@@ -104,7 +141,7 @@ create table if not exists quiz_questions (
 -- ============================================================
 create table if not exists attempts (
   id uuid default uuid_generate_v4() primary key,
-  user_id uuid references public.users(id) on delete cascade not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
   quiz_id uuid references quizzes(id) on delete cascade not null,
   score integer default 0,
   total_questions integer default 0,
@@ -121,7 +158,7 @@ create table if not exists attempts (
 -- ============================================================
 create table if not exists leaderboard (
   id uuid default uuid_generate_v4() primary key,
-  user_id uuid references public.users(id) on delete cascade not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
   quiz_id uuid references quizzes(id) on delete cascade,
   period text default 'global' check (period in ('global', 'weekly', 'quiz')),
   score integer default 0,
@@ -132,129 +169,54 @@ create table if not exists leaderboard (
 );
 
 -- ============================================================
--- ROW LEVEL SECURITY
+-- RLS POLICIES
 -- ============================================================
-alter table users enable row level security;
+alter table categories enable row level security;
+alter table institutes enable row level security;
 alter table subjects enable row level security;
 alter table topics enable row level security;
+alter table users enable row level security;
 alter table questions enable row level security;
 alter table quizzes enable row level security;
 alter table quiz_questions enable row level security;
 alter table attempts enable row level security;
 alter table leaderboard enable row level security;
 
--- Drop all policies first so this script is safely re-runnable
-drop policy if exists "Users can view own profile" on users;
-drop policy if exists "Users can update own profile" on users;
-drop policy if exists "Users can insert own profile" on users;
-drop policy if exists "Anyone can read subjects" on subjects;
-drop policy if exists "Admins can manage subjects" on subjects;
-drop policy if exists "Anyone can read topics" on topics;
-drop policy if exists "Admins can manage topics" on topics;
-drop policy if exists "Anyone can read questions" on questions;
-drop policy if exists "Admins can manage questions" on questions;
-drop policy if exists "Anyone can read quizzes" on quizzes;
-drop policy if exists "Admins can manage quizzes" on quizzes;
-drop policy if exists "Anyone can read quiz_questions" on quiz_questions;
-drop policy if exists "Admins can manage quiz_questions" on quiz_questions;
-drop policy if exists "Users can read own attempts" on attempts;
-drop policy if exists "Users can insert own attempts" on attempts;
-drop policy if exists "Users can update own attempts" on attempts;
-drop policy if exists "Anyone can read leaderboard" on leaderboard;
-drop policy if exists "Users can upsert own leaderboard" on leaderboard;
-drop policy if exists "Anyone can read profiles" on users;
-drop policy if exists "Users can view own profile" on users;
-drop policy if exists "Users can insert own leaderboard" on leaderboard;
-drop policy if exists "Users can update own leaderboard" on leaderboard;
+-- Categories: public read
+create policy "categories_read_all" on categories for select using (true);
 
--- Users: anyone can read basic profile (needed for leaderboard join), own row for write
-create policy "Anyone can read profiles" on users for select using (true);
-create policy "Users can update own profile" on users for update using (auth.uid() = id);
-create policy "Users can insert own profile" on users for insert with check (auth.uid() = id);
+-- Institutes: public read
+create policy "institutes_read_all" on institutes for select using (true);
 
--- Subjects: everyone reads, admins write
-create policy "Anyone can read subjects" on subjects for select using (true);
-create policy "Admins can manage subjects" on subjects for all using (
-  exists (select 1 from users where id = auth.uid() and role = 'admin')
-);
+-- Subjects: public read
+create policy "subjects_read_all" on subjects for select using (true);
 
--- Topics: everyone reads, admins write
-create policy "Anyone can read topics" on topics for select using (true);
-create policy "Admins can manage topics" on topics for all using (
-  exists (select 1 from users where id = auth.uid() and role = 'admin')
-);
+-- Topics: public read
+create policy "topics_read_all" on topics for select using (true);
 
--- Questions: everyone reads, admins write
-create policy "Anyone can read questions" on questions for select using (true);
-create policy "Admins can manage questions" on questions for all using (
-  exists (select 1 from users where id = auth.uid() and role = 'admin')
-);
+-- Users: own row
+create policy "users_read_own" on users for select using (auth.uid() = id);
+create policy "users_update_own" on users for update using (auth.uid() = id);
+create policy "users_insert_own" on users for insert with check (auth.uid() = id);
 
--- Quizzes: everyone reads, admins write
-create policy "Anyone can read quizzes" on quizzes for select using (true);
-create policy "Admins can manage quizzes" on quizzes for all using (
-  exists (select 1 from users where id = auth.uid() and role = 'admin')
-);
+-- Questions: public read, admin write
+create policy "questions_read_all" on questions for select using (true);
+create policy "questions_admin_write" on questions for all
+  using (exists (select 1 from users where id = auth.uid() and role in ('admin','super_admin','institute_admin')));
 
--- Quiz questions: everyone reads, admins write
-create policy "Anyone can read quiz_questions" on quiz_questions for select using (true);
-create policy "Admins can manage quiz_questions" on quiz_questions for all using (
-  exists (select 1 from users where id = auth.uid() and role = 'admin')
-);
+-- Quizzes: public read, admin write
+create policy "quizzes_read_all" on quizzes for select using (true);
+create policy "quizzes_admin_write" on quizzes for all
+  using (exists (select 1 from users where id = auth.uid() and role in ('admin','super_admin','institute_admin')));
 
--- Attempts: own rows
-create policy "Users can read own attempts" on attempts for select using (auth.uid() = user_id);
-create policy "Users can insert own attempts" on attempts for insert with check (auth.uid() = user_id);
-create policy "Users can update own attempts" on attempts for update using (auth.uid() = user_id);
+-- Quiz questions: public read, admin write
+create policy "quiz_questions_read_all" on quiz_questions for select using (true);
+create policy "quiz_questions_admin_write" on quiz_questions for all
+  using (exists (select 1 from users where id = auth.uid() and role in ('admin','super_admin','institute_admin')));
 
--- Leaderboard: everyone reads, authenticated users write own rows
-create policy "Anyone can read leaderboard" on leaderboard for select using (true);
-create policy "Users can insert own leaderboard" on leaderboard for insert with check (auth.uid() = user_id);
-create policy "Users can update own leaderboard" on leaderboard for update using (auth.uid() = user_id);
+-- Attempts: own row
+create policy "attempts_own" on attempts for all using (auth.uid() = user_id);
 
--- ============================================================
--- TRIGGER: auto-create user profile on signup
--- ============================================================
-create or replace function handle_new_user()
-returns trigger as $$
-begin
-  insert into public.users (id, email, full_name, avatar_url)
-  values (
-    new.id,
-    new.email,
-    new.raw_user_meta_data->>'full_name',
-    new.raw_user_meta_data->>'avatar_url'
-  )
-  on conflict (id) do nothing;
-  return new;
-end;
-$$ language plpgsql security definer;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function handle_new_user();
-
--- ============================================================
--- SEED: MBBS Subjects
--- ============================================================
-insert into subjects (name) values
-  ('Anatomy'),
-  ('Physiology'),
-  ('Biochemistry'),
-  ('Pathology'),
-  ('Pharmacology'),
-  ('Microbiology'),
-  ('Forensic Medicine'),
-  ('PSM'),
-  ('ENT'),
-  ('Ophthalmology'),
-  ('Medicine'),
-  ('Surgery'),
-  ('Pediatrics'),
-  ('Obstetrics and Gynecology'),
-  ('Orthopedics'),
-  ('Dermatology'),
-  ('Psychiatry'),
-  ('Radiology')
-on conflict (name) do nothing;
+-- Leaderboard: public read
+create policy "leaderboard_read_all" on leaderboard for select using (true);
+create policy "leaderboard_own_write" on leaderboard for all using (auth.uid() = user_id);

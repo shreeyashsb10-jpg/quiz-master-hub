@@ -1,0 +1,310 @@
+Transform the app into a scalable multi-category educational SaaS platform.
+
+CATEGORIES:
+
+* Medical PG (NEET PG + INICET + FMGE)
+* NEET UG
+* JEE
+* Class 10
+* Class 12
+
+Do NOT redesign the whole app.
+Keep the current UI and optimize existing structure.
+
+⸻
+
+STEP 1 — CATEGORY SYSTEM
+
+Create categories table:
+
+* id
+* name
+* slug
+* icon
+* created_at
+
+Default categories:
+
+* Medical PG
+* NEET UG
+* JEE
+* Class 10
+* Class 12
+
+Medical PG includes:
+
+* NEET PG
+* INICET
+* FMGE
+
+⸻
+
+STEP 2 — SUBJECTS BY CATEGORY
+
+Update subjects table:
+Add:
+
+* category_id
+
+Subjects should belong to categories.
+
+Medical PG subjects:
+
+* Anatomy
+* Physiology
+* Biochemistry
+* Pathology
+* Pharmacology
+* Microbiology
+* Forensic Medicine
+* Community Medicine
+* ENT
+* Ophthalmology
+* Medicine
+* Surgery
+* Obstetrics & Gynecology
+* Pediatrics
+* Orthopedics
+* Dermatology
+* Psychiatry
+* Radiology
+* Anesthesia
+
+NEET UG:
+
+* Physics
+* Chemistry
+* Biology
+
+JEE:
+
+* Physics
+* Chemistry
+* Mathematics
+
+Class 10:
+
+* Science
+* Maths
+* English
+* SST
+
+Class 12:
+
+* Physics
+* Chemistry
+* Biology
+* Maths
+
+⸻
+
+STEP 3 — PROFILE SETUP FLOW
+
+After OTP/email login:
+
+Check user role from profiles table.
+
+Roles:
+
+* student
+* institute_admin
+* super_admin
+
+FLOW:
+
+1. If role = student:
+
+* Check if profile is complete
+* If incomplete → redirect to profile setup page
+* If complete → dashboard
+
+2. If role = institute_admin:
+
+* Open institute admin dashboard directly
+* Do NOT show student profile setup
+
+3. If role = super_admin:
+
+* Open super admin dashboard directly
+
+Profile is incomplete if:
+
+* full_name empty or Anonymous
+* category not selected
+* academic year/class empty
+* institute/coaching/college name empty
+
+Mandatory student profile fields:
+
+* full_name
+* category
+* exam_type
+* academic_year
+* institute_name
+
+Dynamic exam type options:
+
+Medical PG:
+
+* NEET PG
+* INICET
+* FMGE
+
+Dynamic year/class options:
+
+Medical PG:
+
+* 1st Year MBBS
+* 2nd Year MBBS
+* 3rd Year MBBS
+* Final Year MBBS
+* Intern
+* Graduate
+
+NEET UG:
+
+* 11th
+* 12th
+* Dropper
+
+JEE:
+
+* 11th
+* 12th
+* Dropper
+
+Class 10:
+
+* Class 10
+
+Class 12:
+
+* Class 12
+
+Add to profiles table:
+
+* category_id
+* exam_type
+* academic_year
+* institute_name
+* institute_id
+* role
+
+After successful profile completion:
+
+* redirect to dashboard
+
+Prevent:
+
+* blank pages
+* redirect loops
+* loading glitches
+
+⸻
+
+STEP 4 — MULTI INSTITUTE SYSTEM
+
+Create institutes table:
+
+* id
+* name
+* category_id
+* created_at
+
+Each user belongs to an institute.
+
+IMPORTANT:
+Current existing admin account should become SUPER ADMIN automatically.
+
+Super admin can:
+
+* create institutes
+* assign categories
+* create institute admins
+* manage all data
+* manage subscriptions
+
+Institute admins should ONLY:
+
+* upload questions for their category
+* create quizzes
+* manage students of their institute
+* see their analytics
+
+Students should NEVER access admin routes.
+
+⸻
+
+STEP 5 — QUESTION FILTERING
+
+While creating quizzes:
+Allow:
+
+* multiple subjects selection
+* multiple topics selection
+
+Questions should NOT disappear when changing subjects.
+
+Keep previously selected questions preserved.
+
+Add:
+
+* search
+* filters
+* subject chips
+* topic chips
+
+⸻
+
+STEP 6 — STUDENT EXPERIENCE
+
+Students should ONLY see:
+
+* quizzes of their category
+* subjects of their category
+* institute leaderboard
+
+⸻
+
+STEP 7 — QUIZ PROTECTION
+
+During ongoing quiz:
+Show warning modal before:
+
+* dashboard
+* profile
+* leaderboard
+* browser back
+* refresh
+
+Message:
+“Your quiz is still running. Are you sure you want to exit?”
+
+⸻
+
+STEP 8 — LOGIN IMPROVEMENTS
+
+Remove broken Google login button completely.
+
+Fix:
+
+* blank page after login
+* page not found issue
+* unsafe redirects
+
+Unknown routes should safely redirect to dashboard.
+
+⸻
+
+STEP 9 — FUTURE READY SAAS STRUCTURE
+
+Keep architecture scalable for:
+
+* subscriptions
+* institute branding
+* custom domains
+* analytics
+* payment integration
+* mobile app later
+
+Use secure Supabase role filtering and institute-based query isolation everywhere.

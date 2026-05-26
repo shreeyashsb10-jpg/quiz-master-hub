@@ -1,27 +1,46 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { useSubjects } from "@/hooks/useSubjects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2 } from "lucide-react";
 
-interface Topic {
-  id: string;
-  name: string;
-  subject_id: string;
-}
+interface Category { id: string; name: string; slug: string; icon: string | null; }
+interface Subject { id: string; name: string; category_id: string | null; }
+interface Topic { id: string; name: string; subject_id: string; }
 
 export default function AdminSubjects() {
-  const { profile } = useAuth();
-  const { subjects, loading: sLoading } = useSubjects();
+  const { isAdmin } = useAuth();
   const { toast } = useToast();
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [sLoading, setSLoading] = useState(true);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedSubject, setSelectedSubject] = useState("");
   const [newTopicName, setNewTopicName] = useState("");
+  const [newSubjectName, setNewSubjectName] = useState("");
   const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    supabase.from("categories").select("*").order("name").then(({ data }) => {
+      setCategories((data as Category[]) ?? []);
+    });
+  }, []);
+
+  useEffect(() => {
+    setSLoading(true);
+    setSelectedSubject("");
+    let query = supabase.from("subjects").select("*").order("name");
+    if (filterCategory !== "all") query = query.eq("category_id", filterCategory);
+    query.then(({ data }) => {
+      setSubjects((data as Subject[]) ?? []);
+      setSLoading(false);
+    });
+  }, [filterCategory]);
 
   useEffect(() => {
     if (selectedSubject) {
@@ -47,26 +66,73 @@ export default function AdminSubjects() {
     toast({ title: "Topic deleted" });
   }
 
-  if (profile?.role !== "admin") return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
+  async function handleAddSubject(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newSubjectName.trim()) return;
+    const catId = filterCategory !== "all" ? filterCategory : null;
+    const { data, error } = await supabase.from("subjects").insert({ name: newSubjectName.trim(), category_id: catId }).select("*").single();
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else { setSubjects(prev => [...prev, data as Subject]); setNewSubjectName(""); toast({ title: "Subject added!" }); }
+  }
+
+  if (!isAdmin) return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Subjects & Topics</h1>
 
-      <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-        <h2 className="font-semibold">Subjects ({subjects.length})</h2>
-        <p className="text-sm text-muted-foreground">All 18 MBBS subjects are pre-loaded. Select one to manage its topics.</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {subjects.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setSelectedSubject(s.id)}
-              className={`text-left px-3 py-2 rounded-lg text-sm border transition-colors ${selectedSubject === s.id ? "bg-primary/10 border-primary text-primary" : "border-border hover:border-primary/50"}`}
-            >
-              {s.name}
-            </button>
-          ))}
+      {/* Category Filter */}
+      {categories.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground shrink-0">Filter by:</span>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-52">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
+      )}
+
+      <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Subjects ({subjects.length})</h2>
+        </div>
+
+        {/* Add subject */}
+        <form onSubmit={handleAddSubject} className="flex gap-2">
+          <Input
+            value={newSubjectName}
+            onChange={e => setNewSubjectName(e.target.value)}
+            placeholder="New subject name"
+            className="flex-1"
+          />
+          <Button type="submit" variant="outline">
+            <Plus className="w-4 h-4 mr-1" /> Add Subject
+          </Button>
+        </form>
+
+        {sLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[...Array(6)].map((_, i) => <div key={i} className="h-9 bg-muted rounded-lg animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {subjects.map(s => (
+              <button
+                key={s.id}
+                onClick={() => setSelectedSubject(s.id)}
+                className={`text-left px-3 py-2 rounded-lg text-sm border transition-colors ${selectedSubject === s.id ? "bg-primary/10 border-primary text-primary" : "border-border hover:border-primary/50"}`}
+              >
+                {s.name}
+              </button>
+            ))}
+            {subjects.length === 0 && <p className="text-sm text-muted-foreground col-span-3 py-4 text-center">No subjects found.</p>}
+          </div>
+        )}
       </div>
 
       {selectedSubject && (

@@ -1,11 +1,11 @@
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { BookOpen, Layers, HelpCircle, BarChart3, Plus } from "lucide-react";
+import { BookOpen, Layers, HelpCircle, ShieldCheck } from "lucide-react";
 
 export default function AdminDashboard() {
-  const { profile } = useAuth();
-  if (profile?.role !== "admin") {
+  const { isAdmin, isSuperAdmin, profile } = useAuth();
+
+  if (!isAdmin) {
     return (
       <div className="p-6 text-center text-muted-foreground">
         <p className="text-lg font-semibold">Access Denied</p>
@@ -14,9 +14,15 @@ export default function AdminDashboard() {
     );
   }
 
+  const roleLabel = isSuperAdmin ? "Super Admin" : "Institute Admin";
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
       <div>
+        <div className="flex items-center gap-2 mb-1">
+          <ShieldCheck className="w-5 h-5 text-primary" />
+          <span className="text-xs font-medium text-primary uppercase tracking-wide">{roleLabel}</span>
+        </div>
         <h1 className="text-2xl font-bold">Admin Panel</h1>
         <p className="text-muted-foreground text-sm mt-1">Manage quizzes, questions, and subjects</p>
       </div>

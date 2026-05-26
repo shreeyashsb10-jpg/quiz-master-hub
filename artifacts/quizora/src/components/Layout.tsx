@@ -4,9 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuizGuard } from "@/contexts/QuizGuardContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, BookOpen, Trophy, User, Settings, Zap, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, BookOpen, Trophy, User, Settings, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
 
-const navItems = [
+const studentNavItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/quizzes", icon: BookOpen, label: "Quizzes" },
   { href: "/leaderboard", icon: Trophy, label: "Leaderboard" },
@@ -15,9 +15,11 @@ const navItems = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
-  const { profile } = useAuth();
+  const { profile, isAdmin } = useAuth();
   const { isQuizActive, setQuizActive } = useQuizGuard();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  const navItems = studentNavItems;
 
   function handleNav(href: string) {
     if (isQuizActive) {
@@ -69,12 +71,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          {profile?.role === "admin" && (
+          {isAdmin && (
             <div
               onClick={() => handleNav("/admin")}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${location.startsWith("/admin") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
             >
-              <Settings className="w-4 h-4" />
+              <ShieldCheck className="w-4 h-4" />
               Admin
             </div>
           )}
@@ -118,7 +120,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             );
           })}
-          {profile?.role === "admin" && (
+          {isAdmin && (
             <div
               onClick={() => handleNav("/admin")}
               className={`flex flex-col items-center gap-1 p-2 rounded-lg cursor-pointer ${location.startsWith("/admin") ? "text-primary" : "text-muted-foreground"}`}
@@ -144,12 +146,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               Are you sure you want to exit the quiz? Your progress may be lost.
             </p>
             <div className="flex gap-3 pt-1">
-              <Button variant="outline" className="flex-1" onClick={cancelExit}>
-                Stay in Quiz
-              </Button>
-              <Button variant="destructive" className="flex-1" onClick={confirmExit}>
-                Exit Quiz
-              </Button>
+              <Button variant="outline" className="flex-1" onClick={cancelExit}>Stay in Quiz</Button>
+              <Button variant="destructive" className="flex-1" onClick={confirmExit}>Exit Quiz</Button>
             </div>
           </div>
         </div>

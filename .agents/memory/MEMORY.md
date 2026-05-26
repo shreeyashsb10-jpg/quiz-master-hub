@@ -1,0 +1,1 @@
+- [Quizora Multi-Category Architecture](quizora-multicategory.md) — categories/institutes tables added; profile setup gate for students; role compat rules.

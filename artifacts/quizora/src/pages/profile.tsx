@@ -1,24 +1,49 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { supabase, CATEGORY_META } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useMyAttempts } from "@/hooks/useAttempts";
 import { calcAccuracy, formatTime } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Camera } from "lucide-react";
 
+interface Category { id: string; name: string; slug: string; icon: string | null; }
+
 export default function ProfilePage() {
-  const { profile, user, signOut, refreshProfile } = useAuth();
+  const { profile, user, signOut, refreshProfile, isAdmin } = useAuth();
   const { attempts } = useMyAttempts();
   const { toast } = useToast();
 
+  const [categories, setCategories] = useState<Category[]>([]);
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
-  const [collegeName, setCollegeName] = useState(profile?.college_name ?? "");
-  const [mbbsYear, setMbbsYear] = useState(profile?.mbbs_year ?? "");
+  const [collegeName, setCollegeName] = useState(profile?.institute_name ?? profile?.college_name ?? "");
+  const [mbbsYear, setMbbsYear] = useState(profile?.academic_year ?? profile?.mbbs_year ?? "");
+  const [categoryId, setCategoryId] = useState(profile?.category_id ?? "");
+  const [categorySlug, setCategorySlug] = useState("");
+  const [examType, setExamType] = useState(profile?.exam_type ?? "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    supabase.from("categories").select("*").order("name").then(({ data }) => {
+      const cats = (data as Category[]) ?? [];
+      setCategories(cats);
+      const current = cats.find(c => c.id === (profile?.category_id ?? ""));
+      if (current) setCategorySlug(current.slug);
+    });
+  }, [profile?.category_id]);
+
+  function handleCategoryChange(id: string) {
+    setCategoryId(id);
+    setExamType("");
+    const cat = categories.find(c => c.id === id);
+    setCategorySlug(cat?.slug ?? "");
+  }
+
+  const meta = categorySlug ? CATEGORY_META[categorySlug] : null;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -28,13 +53,14 @@ export default function ProfilePage() {
       full_name: fullName,
       college_name: collegeName,
       mbbs_year: mbbsYear,
+      institute_name: collegeName || null,
+      academic_year: mbbsYear || null,
+      category_id: categoryId || null,
+      exam_type: examType || null,
       updated_at: new Date().toISOString(),
     }).eq("id", user.id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else {
-      await refreshProfile();
-      toast({ title: "Profile saved!" });
-    }
+    else { await refreshProfile(); toast({ title: "Profile saved!" }); }
     setSaving(false);
   }
 
@@ -60,6 +86,8 @@ export default function ProfilePage() {
     ? Math.round(attempts.reduce((s, a) => s + calcAccuracy(a.correct_answers, a.total_questions), 0) / attempts.length)
     : 0;
 
+  const categoryName = categories.find(c => c.id === categoryId)?.name;
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
@@ -69,7 +97,6 @@ export default function ProfilePage() {
         </Button>
       </div>
 
-      {/* Avatar */}
       <div className="flex items-center gap-6">
         <div className="relative">
           <Avatar className="w-20 h-20">
@@ -84,11 +111,11 @@ export default function ProfilePage() {
         <div>
           <div className="font-semibold text-lg">{profile?.full_name ?? "Your Name"}</div>
           <div className="text-sm text-muted-foreground">{user?.email}</div>
-          <div className="text-xs text-primary mt-1 capitalize">{profile?.plan_type ?? "free"} plan</div>
+          {categoryName && <div className="text-xs text-primary mt-1">{categoryName}</div>}
+          <div className="text-xs text-muted-foreground capitalize mt-0.5">{profile?.plan_type ?? "free"} plan</div>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: "Total Points", value: profile?.total_points ?? 0 },
@@ -103,27 +130,66 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      {/* Edit form */}
       <form onSubmit={handleSave} className="bg-card border border-border rounded-2xl p-6 space-y-4">
         <h2 className="font-semibold text-lg">Edit Profile</h2>
         <div className="space-y-1">
           <label className="text-sm font-medium">Full Name</label>
-          <Input data-testid="input-full-name" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Dr. Your Name" />
+          <Input data-testid="input-full-name" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your Name" />
         </div>
+
+        {categories.length > 0 && !isAdmin && (
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Category</label>
+            <Select value={categoryId} onValueChange={handleCategoryChange}>
+              <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+              <SelectContent>
+                {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {meta && meta.examTypes.length > 1 && (
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Exam Type</label>
+            <Select value={examType} onValueChange={setExamType}>
+              <SelectTrigger><SelectValue placeholder="Select exam type" /></SelectTrigger>
+              <SelectContent>
+                {meta.examTypes.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {meta && (
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Year / Class</label>
+            <Select value={mbbsYear} onValueChange={setMbbsYear}>
+              <SelectTrigger><SelectValue placeholder="Select year/class" /></SelectTrigger>
+              <SelectContent>
+                {meta.yearOptions.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {(!meta || isAdmin) && (
+          <div className="space-y-1">
+            <label className="text-sm font-medium">{isAdmin ? "MBBS Year" : "Year / Class"}</label>
+            <Input data-testid="input-mbbs-year" value={mbbsYear} onChange={e => setMbbsYear(e.target.value)} placeholder="e.g. 3rd Year, Intern..." />
+          </div>
+        )}
+
         <div className="space-y-1">
-          <label className="text-sm font-medium">College Name</label>
-          <Input data-testid="input-college" value={collegeName} onChange={e => setCollegeName(e.target.value)} placeholder="Your Medical College" />
+          <label className="text-sm font-medium">Institute / College / Coaching</label>
+          <Input data-testid="input-college" value={collegeName} onChange={e => setCollegeName(e.target.value)} placeholder="e.g. AIIMS Delhi" />
         </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">MBBS Year</label>
-          <Input data-testid="input-mbbs-year" value={mbbsYear} onChange={e => setMbbsYear(e.target.value)} placeholder="e.g. 3rd Year, Intern..." />
-        </div>
+
         <Button data-testid="button-save-profile" type="submit" disabled={saving}>
           {saving ? "Saving..." : "Save Changes"}
         </Button>
       </form>
 
-      {/* Quiz History */}
       {attempts.length > 0 && (
         <div>
           <h2 className="font-semibold text-lg mb-4">Quiz History</h2>

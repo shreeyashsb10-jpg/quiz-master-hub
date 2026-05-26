@@ -9,8 +9,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Database type helpers
+export type UserRole = "user" | "admin" | "institute_admin" | "super_admin";
+
 export type Tables = {
+  categories: {
+    id: string;
+    name: string;
+    slug: string;
+    icon: string | null;
+    created_at: string;
+  };
+  institutes: {
+    id: string;
+    name: string;
+    category_id: string | null;
+    created_at: string;
+  };
   users: {
     id: string;
     email: string;
@@ -25,7 +39,12 @@ export type Tables = {
     total_points: number;
     weekly_points: number;
     streak: number;
-    role: "user" | "admin";
+    role: UserRole;
+    category_id: string | null;
+    exam_type: string | null;
+    academic_year: string | null;
+    institute_name: string | null;
+    institute_id: string | null;
     created_at: string;
     updated_at: string;
   };
@@ -34,6 +53,7 @@ export type Tables = {
     name: string;
     description: string | null;
     icon: string | null;
+    category_id: string | null;
     created_at: string;
   };
   topics: {
@@ -101,4 +121,28 @@ export type Tables = {
     time_taken_seconds: number;
     updated_at: string;
   };
+};
+
+// Category metadata — exam type and year options per category slug
+export const CATEGORY_META: Record<string, { examTypes: string[]; yearOptions: string[] }> = {
+  "medical-pg": {
+    examTypes: ["NEET PG", "INICET", "FMGE"],
+    yearOptions: ["1st Year MBBS", "2nd Year MBBS", "3rd Year MBBS", "Final Year MBBS", "Intern", "Graduate"],
+  },
+  "neet-ug": {
+    examTypes: ["NEET UG"],
+    yearOptions: ["11th", "12th", "Dropper"],
+  },
+  "jee": {
+    examTypes: ["JEE Main", "JEE Advanced"],
+    yearOptions: ["11th", "12th", "Dropper"],
+  },
+  "class-10": {
+    examTypes: ["Board Exam"],
+    yearOptions: ["Class 10"],
+  },
+  "class-12": {
+    examTypes: ["Board Exam"],
+    yearOptions: ["Class 12"],
+  },
 };

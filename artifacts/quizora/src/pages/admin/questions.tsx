@@ -36,7 +36,7 @@ interface StoredQuestion {
 }
 
 export default function AdminQuestions() {
-  const { profile } = useAuth();
+  const { profile, isAdmin } = useAuth();
   const { subjects } = useSubjects();
   const { toast } = useToast();
 
@@ -141,7 +141,7 @@ export default function AdminQuestions() {
     toast({ title: "Question deleted" });
   }
 
-  if (profile?.role !== "admin") return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
+  if (!isAdmin) return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
 
   const filteredBank = questions.filter(q =>
     !searchText || q.question_text.toLowerCase().includes(searchText.toLowerCase())
