@@ -108,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }
 
-  const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
+  const isAdmin = profile?.role === "admin" || profile?.role === "super_admin" || profile?.role === "institute_admin";
   const isSuperAdmin = profile?.role === "super_admin" || profile?.role === "admin";
   const isInstituteAdmin = profile?.role === "institute_admin";
   const isProfileComplete = checkProfileComplete(profile);
