@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { BookOpen, Layers, HelpCircle, ShieldCheck } from "lucide-react";
+import { BookOpen, Layers, HelpCircle, ShieldCheck, Users } from "lucide-react";
 
 export default function AdminDashboard() {
   const { isAdmin, isSuperAdmin, profile } = useAuth();
@@ -32,6 +32,7 @@ export default function AdminDashboard() {
           { href: "/admin/questions", icon: HelpCircle, label: "Questions", desc: "Add, edit, bulk upload MCQs", color: "text-sky-400" },
           { href: "/admin/quizzes", icon: Layers, label: "Quizzes", desc: "Create and schedule quizzes", color: "text-emerald-400" },
           { href: "/admin/subjects", icon: BookOpen, label: "Subjects & Topics", desc: "Manage subjects and topics", color: "text-purple-400" },
+          ...(isSuperAdmin ? [{ href: "/admin/admins", icon: Users, label: "Admins", desc: "Grant or revoke institute admin access", color: "text-rose-400" }] : []),
         ].map(item => (
           <Link key={item.href} href={item.href}>
             <div className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-colors cursor-pointer">

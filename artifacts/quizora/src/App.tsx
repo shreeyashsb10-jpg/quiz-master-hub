@@ -18,6 +18,7 @@ const AdminDashboard  = lazy(() => import("@/pages/admin/index"));
 const AdminQuestions  = lazy(() => import("@/pages/admin/questions"));
 const AdminQuizzes    = lazy(() => import("@/pages/admin/quizzes"));
 const AdminSubjects   = lazy(() => import("@/pages/admin/subjects"));
+const AdminAdmins     = lazy(() => import("@/pages/admin/admins"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -81,6 +82,7 @@ function ProtectedRoutes() {
           <Route path="/admin/questions" component={AdminQuestions} />
           <Route path="/admin/quizzes" component={AdminQuizzes} />
           <Route path="/admin/subjects" component={AdminSubjects} />
+          <Route path="/admin/admins" component={AdminAdmins} />
           <Route component={() => <Redirect to="/dashboard" />} />
         </Switch>
       </Suspense>
