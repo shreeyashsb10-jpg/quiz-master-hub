@@ -70,12 +70,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Fetch or auto-create a profile row for the authenticated user.
-   * - First tries by auth UUID
-   * - Falls back to email lookup (for pre-invited institute admins)
+   * - Serves cached profile immediately for fast re-loads
+   * - Fetches fresh data from DB and updates cache
    * - Auto-creates a student profile on first login
    */
   async function fetchProfile(userId: string, email?: string) {
-    // 1. Primary lookup by auth UUID
+    // Serve cached profile instantly so the UI unblocks immediately
+    const cacheKey = `quizora_profile_${userId}`;
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        setProfile(JSON.parse(cached) as UserProfile);
+        setProfileLoaded(true);
+      }
+    } catch { /* ignore */ }
+
+    // Fetch fresh from DB
     const { data: byId } = await supabase
       .from("users")
       .select("*")
@@ -83,25 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (byId) {
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(byId)); } catch { /* ignore */ }
       setProfile(byId as UserProfile);
       setProfileLoaded(true);
       return;
     }
 
-    // 2. Fallback: lookup by email (for institute admins pre-created by super admin)
-    if (email) {
-      const { data: byEmail } = await supabase
-        .from("users")
-        .select("*")
-        .eq("email", email)
-        .is("id", null)   // only match placeholder rows with no UUID yet
-        .single();
-
-      // Note: this path requires the admin panel to insert rows with id = null,
-      // which is not standard. The realistic path is just auto-create below.
-    }
-
-    // 3. Auto-create a new student profile for first-time login
+    // Auto-create a new student profile for first-time login
     if (email) {
       const { data: created, error } = await supabase
         .from("users")
@@ -121,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (!error && created) {
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(created)); } catch { /* ignore */ }
         setProfile(created as UserProfile);
       }
     }
@@ -131,7 +130,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function refreshProfile() {
     if (user) {
       const { data } = await supabase.from("users").select("*").eq("id", user.id).single();
-      if (data) setProfile(data as UserProfile);
+      if (data) {
+        try { sessionStorage.setItem(`quizora_profile_${user.id}`, JSON.stringify(data)); } catch { /* ignore */ }
+        setProfile(data as UserProfile);
+      }
     }
   }
 
@@ -147,8 +149,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Auth state changes (sign-in, sign-out, token refresh)
+    // Skip INITIAL_SESSION — getSession() above already handles the first load.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, s) => {
+      async (event, s) => {
+        if (event === "INITIAL_SESSION") return;
         setSession(s);
         setUser(s?.user ?? null);
         if (s?.user) {
@@ -176,6 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    if (user) {
+      try { sessionStorage.removeItem(`quizora_profile_${user.id}`); } catch { /* ignore */ }
+    }
     setProfile(null);
     setProfileLoaded(false);
     await supabase.auth.signOut();
