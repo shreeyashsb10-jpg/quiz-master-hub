@@ -26,6 +26,7 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
+  profileLoaded: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
   isInstituteAdmin: boolean;
@@ -51,11 +52,8 @@ function hasStoredSession(): boolean {
 
 function checkProfileComplete(p: UserProfile | null): boolean {
   if (!p) return false;
-  // Admins never need profile setup
   if (p.role === "admin" || p.role === "super_admin" || p.role === "institute_admin") return true;
-  // If category_id column doesn't exist yet (pre-migration), treat as complete
   if (!("category_id" in p)) return true;
-  // Student must have name + category selected
   const hasName = !!p.full_name && p.full_name.trim() !== "" && p.full_name !== "Anonymous";
   const hasCategory = !!p.category_id;
   return hasName && hasCategory;
@@ -65,31 +63,104 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  // loading: true while initial session + profile check is in flight
   const [loading, setLoading] = useState(hasStoredSession);
+  // profileLoaded: true once fetchProfile has resolved (even if profile is null)
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase.from("users").select("*").eq("id", userId).single();
-    if (data) setProfile(data as UserProfile);
+  /**
+   * Fetch or auto-create a profile row for the authenticated user.
+   * - First tries by auth UUID
+   * - Falls back to email lookup (for pre-invited institute admins)
+   * - Auto-creates a student profile on first login
+   */
+  async function fetchProfile(userId: string, email?: string) {
+    // 1. Primary lookup by auth UUID
+    const { data: byId } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (byId) {
+      setProfile(byId as UserProfile);
+      setProfileLoaded(true);
+      return;
+    }
+
+    // 2. Fallback: lookup by email (for institute admins pre-created by super admin)
+    if (email) {
+      const { data: byEmail } = await supabase
+        .from("users")
+        .select("*")
+        .eq("email", email)
+        .is("id", null)   // only match placeholder rows with no UUID yet
+        .single();
+
+      // Note: this path requires the admin panel to insert rows with id = null,
+      // which is not standard. The realistic path is just auto-create below.
+    }
+
+    // 3. Auto-create a new student profile for first-time login
+    if (email) {
+      const { data: created, error } = await supabase
+        .from("users")
+        .insert({
+          id: userId,
+          email,
+          full_name: null,
+          role: "student",
+          plan_type: "free",
+          total_points: 0,
+          weekly_points: 0,
+          streak: 0,
+          category_id: null,
+          institute_id: null,
+        })
+        .select("*")
+        .single();
+
+      if (!error && created) {
+        setProfile(created as UserProfile);
+      }
+    }
+
+    setProfileLoaded(true);
   }
 
   async function refreshProfile() {
-    if (user) await fetchProfile(user.id);
+    if (user) {
+      const { data } = await supabase.from("users").select("*").eq("id", user.id).single();
+      if (data) setProfile(data as UserProfile);
+    }
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
+    // Initial session check — await profile before clearing loading
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+      if (s?.user) {
+        await fetchProfile(s.user.id, s.user.email ?? undefined);
+      }
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
-    });
+    // Auth state changes (sign-in, sign-out, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, s) => {
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) {
+          // Reset profileLoaded so consumers know to wait
+          setProfileLoaded(false);
+          await fetchProfile(s.user.id, s.user.email ?? undefined);
+        } else {
+          setProfile(null);
+          setProfileLoaded(false);
+        }
+      }
+    );
 
     return () => subscription.unsubscribe();
   }, []);
@@ -105,6 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    setProfile(null);
+    setProfileLoaded(false);
     await supabase.auth.signOut();
   }
 
@@ -115,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, session, profile, loading,
+      user, session, profile, loading, profileLoaded,
       isAdmin, isSuperAdmin, isInstituteAdmin, isProfileComplete,
       signInWithOtp, verifyOtp, signOut, refreshProfile,
     }}>

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase, CATEGORY_META } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -18,7 +17,6 @@ function getInitialCode(): string {
 
 export default function ProfileSetup() {
   const { user, profile, refreshProfile } = useAuth();
-  const [, navigate] = useLocation();
   const { toast } = useToast();
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -29,20 +27,17 @@ export default function ProfileSetup() {
   const [academicYear, setAcademicYear] = useState(profile?.academic_year ?? "");
   const [instituteName, setInstituteName] = useState(profile?.institute_name ?? profile?.college_name ?? "");
 
-  // Join code state
   const [joinCode, setJoinCode] = useState(getInitialCode);
   const [verifying, setVerifying] = useState(false);
   const [linkedInstitute, setLinkedInstitute] = useState<LinkedInstitute | null>(null);
   const [codeVerified, setCodeVerified] = useState(false);
   const [codeError, setCodeError] = useState("");
-
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     supabase.from("categories").select("*").order("name").then(({ data }) => {
       setCategories((data as Category[]) ?? []);
     });
-    // Auto-verify if code came from URL
     const initial = getInitialCode();
     if (initial.length >= 4) verifyCode(initial);
   }, []);
@@ -68,7 +63,6 @@ export default function ProfileSetup() {
       setLinkedInstitute(inst);
       setCodeVerified(true);
       setInstituteName(inst.name);
-      // Auto-select the institute's category if set
       if (inst.category_id) {
         setCategoryId(inst.category_id);
         const cat = categories.find(c => c.id === inst.category_id);
@@ -87,7 +81,6 @@ export default function ProfileSetup() {
     setCategorySlug(cat?.slug ?? "");
   }
 
-  // When categories load, resolve the slug for any pre-selected category
   useEffect(() => {
     if (categories.length && categoryId) {
       const cat = categories.find(c => c.id === categoryId);
@@ -103,7 +96,6 @@ export default function ProfileSetup() {
     if (!fullName.trim()) { toast({ title: "Please enter your full name", variant: "destructive" }); return; }
     if (!categoryId) { toast({ title: "Please select your category", variant: "destructive" }); return; }
 
-    // If a code was typed but not verified, verify it now before saving
     if (joinCode.trim() && !codeVerified) {
       toast({ title: "Please verify your institute code first", variant: "destructive" });
       return;
@@ -123,11 +115,14 @@ export default function ProfileSetup() {
 
     if (error) {
       toast({ title: "Error saving profile", description: error.message, variant: "destructive" });
-    } else {
-      await refreshProfile();
-      toast({ title: "Profile set up!" });
-      navigate("/dashboard");
+      setSaving(false);
+      return;
     }
+
+    // Refresh profile — ProtectedRoutes will detect isProfileComplete=true and
+    // redirect to the saved return URL (or /dashboard) automatically.
+    await refreshProfile();
+    toast({ title: "Profile set up! Welcome to Quizora." });
     setSaving(false);
   }
 
@@ -144,7 +139,7 @@ export default function ProfileSetup() {
 
         <form onSubmit={handleSubmit} className="bg-card border border-border rounded-2xl p-8 space-y-5">
 
-          {/* Institute Join Code — shown first, prominent */}
+          {/* Institute Join Code */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium flex items-center gap-1.5">
               <BadgeCheck className="w-4 h-4 text-primary" />
@@ -175,8 +170,6 @@ export default function ProfileSetup() {
                 {verifying ? "Checking…" : "Verify"}
               </Button>
             </div>
-
-            {/* Code feedback */}
             {codeVerified && linkedInstitute && (
               <div className="flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -193,7 +186,6 @@ export default function ProfileSetup() {
 
           <div className="border-t border-border" />
 
-          {/* Full Name */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Full Name *</label>
             <Input
@@ -205,7 +197,6 @@ export default function ProfileSetup() {
             />
           </div>
 
-          {/* Category */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Category *</label>
             <Select
@@ -230,7 +221,6 @@ export default function ProfileSetup() {
             )}
           </div>
 
-          {/* Exam Type */}
           {meta && meta.examTypes.length > 1 && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Exam Type</label>
@@ -239,13 +229,12 @@ export default function ProfileSetup() {
                   <SelectValue placeholder="Select exam type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {meta.examTypes.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                  {meta.examTypes.map(et => <SelectItem key={et} value={et}>{et}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           )}
 
-          {/* Year / Class */}
           {meta && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Year / Class</label>
@@ -260,7 +249,6 @@ export default function ProfileSetup() {
             </div>
           )}
 
-          {/* Institute Name — locked when code used */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Institute / College / Coaching</label>
             <Input
@@ -273,7 +261,7 @@ export default function ProfileSetup() {
           </div>
 
           <Button type="submit" className="w-full h-11" disabled={saving}>
-            {saving ? "Saving…" : "Continue to Dashboard"}
+            {saving ? "Saving…" : "Continue"}
           </Button>
         </form>
       </div>
