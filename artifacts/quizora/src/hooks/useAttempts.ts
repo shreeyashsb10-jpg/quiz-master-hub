@@ -24,7 +24,7 @@ export function useMyAttempts() {
     if (!user) { setLoading(false); return; }
     supabase
       .from("attempts")
-      .select("*, quizzes(title, subjects(name))")
+      .select("id, user_id, quiz_id, score, total_questions, correct_answers, time_taken_seconds, submitted_at, quizzes(title, subjects(name))")
       .eq("user_id", user.id)
       .order("submitted_at", { ascending: false })
       .limit(20)

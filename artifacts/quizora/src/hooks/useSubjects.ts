@@ -14,7 +14,7 @@ export function useSubjects(categoryId?: string | null) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let query = supabase.from("subjects").select("*").order("name");
+    let query = supabase.from("subjects").select("id, name, description, category_id").order("name");
     if (categoryId) {
       query = query.eq("category_id", categoryId);
     }

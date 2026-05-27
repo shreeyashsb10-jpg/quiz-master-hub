@@ -21,7 +21,14 @@ const AdminSubjects   = lazy(() => import("@/pages/admin/subjects"));
 const AdminAdmins     = lazy(() => import("@/pages/admin/admins"));
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60_000,
+      gcTime: 10 * 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
 });
 
 function PageLoader() {

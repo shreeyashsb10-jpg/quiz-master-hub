@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuizzes } from "@/hooks/useQuizzes";
@@ -14,43 +14,50 @@ import { BookOpen, Trophy, Zap, Target, Clock, Users, ChevronRight, Play } from 
 export default function Dashboard() {
   const { profile } = useAuth();
 
-  // Bug 1: filter quizzes by institute (students see their institute + public quizzes)
   const { quizzes, loading: qLoading } = useQuizzes({
     institute_id: profile?.institute_id ?? undefined,
   });
 
-  // Bug 2: filter subjects by student's category
   const { subjects, loading: sLoading } = useSubjects(profile?.category_id);
   const { attempts } = useMyAttempts();
-  const { entries: leaderboard } = useLeaderboard("global");
-  const [, setTick] = useState(0);
+  // Only fetch top 5 for the dashboard preview
+  const { entries: leaderboard } = useLeaderboard("global", undefined, 5);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const t = setInterval(() => setTick(n => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const now = Date.now();
+  // Memoize quiz categorisation — only recomputes when quizzes change, not every tick
+  const { liveQuizzes, upcomingQuizzes, recentQuizzes } = useMemo(() => {
+    const now = Date.now();
+    return {
+      liveQuizzes: quizzes.filter(q => {
+        if (!q.start_time || !q.end_time) return false;
+        return new Date(q.start_time).getTime() <= now && new Date(q.end_time).getTime() >= now;
+      }),
+      upcomingQuizzes: quizzes.filter(q => {
+        if (!q.start_time) return false;
+        return new Date(q.start_time).getTime() > now;
+      }),
+      recentQuizzes: quizzes
+        .filter(q => q.end_time && new Date(q.end_time).getTime() < now)
+        .slice(0, 3),
+    };
+  }, [quizzes]);
 
-  const liveQuizzes = quizzes.filter(q => {
-    if (!q.start_time || !q.end_time) return false;
-    return new Date(q.start_time).getTime() <= now && new Date(q.end_time).getTime() >= now;
-  });
+  // Memoize accuracy — only recomputes when attempts change
+  const { totalAttempted, avgAccuracy } = useMemo(() => {
+    const total = attempts.length;
+    const avg = total
+      ? Math.round(attempts.reduce((sum, a) => sum + calcAccuracy(a.correct_answers, a.total_questions), 0) / total)
+      : 0;
+    return { totalAttempted: total, avgAccuracy: avg };
+  }, [attempts]);
 
-  const upcomingQuizzes = quizzes.filter(q => {
-    if (!q.start_time) return false;
-    return new Date(q.start_time).getTime() > now;
-  });
-
-  const recentQuizzes = quizzes.filter(q => {
-    if (!q.end_time) return false;
-    return new Date(q.end_time).getTime() < now;
-  }).slice(0, 3);
-
-  const totalAttempted = attempts.length;
-  const avgAccuracy = attempts.length
-    ? Math.round(attempts.reduce((sum, a) => sum + calcAccuracy(a.correct_answers, a.total_questions), 0) / attempts.length)
-    : 0;
+  // tick is only used by countdown displays — reference it here to avoid lint warning
+  void tick;
 
   return (
     <div className="space-y-8 p-4 md:p-6 max-w-7xl mx-auto">
@@ -220,7 +227,7 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="bg-card border border-border rounded-xl divide-y divide-border">
-            {leaderboard.slice(0, 5).map((entry, i) => (
+            {leaderboard.map((entry, i) => (
               <div key={entry.id} className="flex items-center gap-3 p-3">
                 <span className={`text-sm font-bold w-5 ${i === 0 ? "text-amber-400" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-muted-foreground"}`}>
                   #{i + 1}

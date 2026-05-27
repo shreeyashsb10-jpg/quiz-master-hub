@@ -36,7 +36,7 @@ export function useQuizzes(filters?: {
     setLoading(true);
     let q = supabase
       .from("quizzes")
-      .select("*, subjects(name)")
+      .select("id, title, description, subject_id, quiz_type, status, start_time, end_time, duration_minutes, is_premium, created_by, created_at, institute_id, subjects(name)")
       .order("created_at", { ascending: false });
 
     if (filters?.type) q = q.eq("quiz_type", filters.type);

@@ -6,8 +6,8 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const rawPort = process.env.PORT;
 const port = rawPort ? Number(rawPort) : 3000;
-
 const basePath = process.env.BASE_PATH ?? "/";
+const isProd = process.env.NODE_ENV === "production";
 
 export default defineConfig({
   base: basePath,
@@ -15,13 +15,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
+    ...(!isProd && process.env.REPL_ID !== undefined
       ? [
           await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer({
-              root: path.resolve(import.meta.dirname, ".."),
-            }),
+            m.cartographer({ root: path.resolve(import.meta.dirname, "..") }),
           ),
           await import("@replit/vite-plugin-dev-banner").then((m) =>
             m.devBanner(),
@@ -40,6 +37,23 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    target: "esnext",
+    minify: "esbuild",
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-supabase": ["@supabase/supabase-js"],
+          "vendor-ui": ["@radix-ui/react-select", "@radix-ui/react-tooltip", "@radix-ui/react-avatar"],
+          "vendor-router": ["wouter"],
+          "vendor-query": ["@tanstack/react-query"],
+        },
+      },
+    },
+  },
+  esbuild: {
+    drop: isProd ? ["console", "debugger"] : [],
   },
   server: {
     port,
@@ -47,9 +61,7 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     hmr: { overlay: false },
-    fs: {
-      strict: true,
-    },
+    fs: { strict: true },
   },
   preview: {
     port,

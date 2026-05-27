@@ -16,7 +16,8 @@ export interface LeaderboardEntry {
 
 export function useLeaderboard(
   period: "global" | "weekly" | "quiz" = "global",
-  quizId?: string
+  quizId?: string,
+  limit = 100
 ) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,14 +27,9 @@ export function useLeaderboard(
     setLoading(true);
     setError(null);
 
-    let q = supabase
-      .from("leaderboard")
-      .select("*, users(full_name, college_name, avatar_url)")
-      .eq("period", period)
-      .order("score", { ascending: false })
-      .limit(100);
+    const fields = "id, user_id, quiz_id, period, score, rank, accuracy, time_taken_seconds, updated_at, users(full_name, college_name, avatar_url)";
 
-    // For quiz leaderboards: rank by score DESC, then time ASC (fastest wins), then accuracy DESC
+    let q;
     if (period === "quiz") {
       if (!quizId) {
         setEntries([]);
@@ -42,23 +38,22 @@ export function useLeaderboard(
       }
       q = supabase
         .from("leaderboard")
-        .select("*, users(full_name, college_name, avatar_url)")
+        .select(fields)
         .eq("period", "quiz")
         .eq("quiz_id", quizId)
         .order("score", { ascending: false })
         .order("time_taken_seconds", { ascending: true })
         .order("accuracy", { ascending: false })
-        .limit(100);
+        .limit(limit);
     } else {
-      // Global / weekly: score DESC, accuracy DESC
       q = supabase
         .from("leaderboard")
-        .select("*, users(full_name, college_name, avatar_url)")
+        .select(fields)
         .eq("period", period)
         .is("quiz_id", null)
         .order("score", { ascending: false })
         .order("accuracy", { ascending: false })
-        .limit(100);
+        .limit(limit);
     }
 
     const { data, error: fetchError } = await q;
@@ -70,7 +65,7 @@ export function useLeaderboard(
       setEntries((data as LeaderboardEntry[]) ?? []);
     }
     setLoading(false);
-  }, [period, quizId]);
+  }, [period, quizId, limit]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
