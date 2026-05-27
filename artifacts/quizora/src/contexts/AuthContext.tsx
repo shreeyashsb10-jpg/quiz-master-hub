@@ -39,12 +39,34 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/** Remove all Supabase auth tokens from localStorage (expired, corrupt, or invalid). */
+function clearStaleAuthTokens() {
+  try {
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes("-auth-token") || key.startsWith("sb-")) {
+        try { localStorage.removeItem(key); } catch { /* ignore */ }
+      }
+    });
+  } catch { /* ignore */ }
+}
+
+/**
+ * Returns true only if a non-expired Supabase token exists in localStorage.
+ * Does NOT clear tokens here — Supabase may still be able to silently refresh them.
+ */
 function hasStoredSession(): boolean {
   try {
-    const key = Object.keys(localStorage).find(k => k.endsWith("-auth-token"));
+    const key = Object.keys(localStorage).find(
+      k => k.endsWith("-auth-token") || (k.startsWith("sb-") && k.endsWith("-auth-token"))
+    );
     if (!key) return false;
-    const data = JSON.parse(localStorage.getItem(key) ?? "{}");
-    return !!data?.access_token && (data?.expires_at ?? 0) > Date.now() / 1000;
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data?.access_token) return false;
+    // Allow up to 60 s grace period — Supabase can still refresh a recently-expired token
+    const expiresAt = (data?.expires_at ?? 0) * 1000;
+    return expiresAt > Date.now() - 60_000;
   } catch {
     return false;
   }
@@ -63,20 +85,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  // loading: true while initial session + profile check is in flight
   const [loading, setLoading] = useState(hasStoredSession);
-  // profileLoaded: true once fetchProfile has resolved (even if profile is null)
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   /**
    * Fetch or auto-create a profile row for the authenticated user.
-   * - Serves cached profile immediately for fast re-loads
-   * - Fetches fresh data from DB and updates cache
-   * - Auto-creates a student profile on first login
+   * Serves a cached profile immediately so the UI unblocks fast, then
+   * refreshes from the DB in the background.
    */
   async function fetchProfile(userId: string, email?: string) {
-    // Serve cached profile instantly so the UI unblocks immediately
     const cacheKey = `quizora_profile_${userId}`;
+
+    // Serve cached profile immediately
     try {
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
@@ -85,78 +105,125 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch { /* ignore */ }
 
-    // Fetch fresh from DB
-    const { data: byId } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (byId) {
-      try { sessionStorage.setItem(cacheKey, JSON.stringify(byId)); } catch { /* ignore */ }
-      setProfile(byId as UserProfile);
-      setProfileLoaded(true);
-      return;
-    }
-
-    // Auto-create a new student profile for first-time login
-    if (email) {
-      const { data: created, error } = await supabase
+    try {
+      const { data: byId, error } = await supabase
         .from("users")
-        .insert({
-          id: userId,
-          email,
-          full_name: null,
-          role: "student",
-          plan_type: "free",
-          total_points: 0,
-          weekly_points: 0,
-          streak: 0,
-          category_id: null,
-          institute_id: null,
-        })
         .select("*")
+        .eq("id", userId)
         .single();
 
-      if (!error && created) {
-        try { sessionStorage.setItem(cacheKey, JSON.stringify(created)); } catch { /* ignore */ }
-        setProfile(created as UserProfile);
+      if (error && error.code !== "PGRST116") {
+        // PGRST116 = no rows found — handled below by auto-create
+        // Any other error: leave cached profile in place
+        setProfileLoaded(true);
+        return;
       }
-    }
+
+      if (byId) {
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(byId)); } catch { /* ignore */ }
+        setProfile(byId as UserProfile);
+        setProfileLoaded(true);
+        return;
+      }
+
+      // Auto-create a new student profile for first-time login
+      if (email) {
+        const { data: created, error: createErr } = await supabase
+          .from("users")
+          .insert({
+            id: userId,
+            email,
+            full_name: null,
+            role: "student",
+            plan_type: "free",
+            total_points: 0,
+            weekly_points: 0,
+            streak: 0,
+            category_id: null,
+            institute_id: null,
+          })
+          .select("*")
+          .single();
+
+        if (!createErr && created) {
+          try { sessionStorage.setItem(cacheKey, JSON.stringify(created)); } catch { /* ignore */ }
+          setProfile(created as UserProfile);
+        }
+      }
+    } catch { /* network error — cached profile (if any) remains visible */ }
 
     setProfileLoaded(true);
   }
 
   async function refreshProfile() {
-    if (user) {
+    if (!user) return;
+    try {
       const { data } = await supabase.from("users").select("*").eq("id", user.id).single();
       if (data) {
         try { sessionStorage.setItem(`quizora_profile_${user.id}`, JSON.stringify(data)); } catch { /* ignore */ }
         setProfile(data as UserProfile);
       }
-    }
+    } catch { /* ignore */ }
   }
 
   useEffect(() => {
-    // Initial session check — await profile before clearing loading
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        await fetchProfile(s.user.id, s.user.email ?? undefined);
-      }
-      setLoading(false);
-    });
+    let cancelled = false;
 
-    // Auth state changes (sign-in, sign-out, token refresh)
-    // Skip INITIAL_SESSION — getSession() above already handles the first load.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, s) => {
-        if (event === "INITIAL_SESSION") return;
+    async function initSession() {
+      try {
+        const { data: { session: s }, error } = await supabase.auth.getSession();
+        if (cancelled) return;
+
+        if (error) {
+          // Token is invalid or refresh failed — clear stale tokens and boot as guest
+          clearStaleAuthTokens();
+          setLoading(false);
+          return;
+        }
+
         setSession(s);
         setUser(s?.user ?? null);
+
         if (s?.user) {
-          // Reset profileLoaded so consumers know to wait
+          await fetchProfile(s.user.id, s.user.email ?? undefined);
+        }
+      } catch {
+        // Network error or unexpected failure — unblock the UI as guest
+        if (!cancelled) clearStaleAuthTokens();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    initSession();
+
+    // Auth state changes (sign-in, sign-out, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, s) => {
+        // getSession() above already handles the very first load
+        if (event === "INITIAL_SESSION") return;
+
+        if (event === "SIGNED_OUT") {
+          // Supabase fires SIGNED_OUT when token refresh fails — treat as full logout
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setProfileLoaded(false);
+          clearStaleAuthTokens();
+          return;
+        }
+
+        if (event === "TOKEN_REFRESHED" && s) {
+          // Only update session/user — no need to re-fetch profile
+          setSession(s);
+          setUser(s.user);
+          return;
+        }
+
+        setSession(s);
+        setUser(s?.user ?? null);
+
+        if (s?.user) {
           setProfileLoaded(false);
           await fetchProfile(s.user.id, s.user.email ?? undefined);
         } else {
@@ -166,7 +233,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function signInWithOtp(email: string) {

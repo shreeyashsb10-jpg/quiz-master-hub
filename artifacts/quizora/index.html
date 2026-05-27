@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- Prevent browsers from caching index.html — JS/CSS assets are already content-hashed by Vite -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Quizora</title>
     <meta name="description" content="Quizora — Competitive Quiz Platform" />
     <meta name="robots" content="index, follow" />
@@ -13,9 +17,9 @@
     <meta name="twitter:title" content="Quizora" />
     <meta name="twitter:description" content="Quizora — Competitive Quiz Platform" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- Preconnect to Supabase for faster API calls -->
+    <!-- Preconnect to Supabase for faster first API call -->
     <link rel="preconnect" href="https://ymjrvgmnclahlelhtlca.supabase.co" crossorigin />
-    <!-- Fonts: display=swap prevents render blocking -->
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />

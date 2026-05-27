@@ -52,6 +52,10 @@ export default defineConfig({
       },
     },
   },
+  define: {
+    // Baked into every build — used by main.tsx to bust stale caches
+    __APP_VERSION__: JSON.stringify(new Date().toISOString()),
+  },
   esbuild: {
     drop: isProd ? ["console", "debugger"] : [],
   },
