@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase, CATEGORY_META } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ function getInitialCode(): string {
 export default function ProfileSetup() {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
@@ -119,11 +121,13 @@ export default function ProfileSetup() {
       return;
     }
 
-    // Refresh profile — ProtectedRoutes will detect isProfileComplete=true and
-    // redirect to the saved return URL (or /dashboard) automatically.
     await refreshProfile();
     toast({ title: "Profile set up! Welcome to Quizora." });
     setSaving(false);
+    const returnUrl = sessionStorage.getItem("quizora_return_url");
+    sessionStorage.removeItem("quizora_return_url");
+    const dest = returnUrl && !["", "/", "/auth", "/profile-setup"].includes(returnUrl) ? returnUrl : "/dashboard";
+    setLocation(dest);
   }
 
   return (
