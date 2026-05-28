@@ -33,10 +33,11 @@ interface Question {
 }
 
 const QUESTION_SELECT = "id, question_text, subject_id, topic_id, topics(name), subjects(name)";
-const QUIZ_SELECT = "id, title, description, subject_id, quiz_type, status, start_time, end_time, duration_minutes, is_premium, institute_id, subjects(name)";
+const QUIZ_SELECT =
+  "id, title, description, subject_id, quiz_type, status, start_time, end_time, duration_minutes, is_premium, institute_id, subjects(name)";
 
 export default function AdminQuizzes() {
-  const { profile, user, isAdmin, isInstituteAdmin } = useAuth();
+  const { profile, user, isAdmin, isInstituteAdmin, profileLoaded } = useAuth();
   const { subjects } = useSubjects(profile?.category_id);
   const { toast } = useToast();
 
@@ -70,12 +71,23 @@ export default function AdminQuizzes() {
   const [formPickerTopic, setFormPickerTopic] = useState("all");
   const [formSearchQ, setFormSearchQ] = useState("");
 
-  const buildInstituteFilter = useCallback(<T extends { eq: (col: string, val: string) => T }>(q: T): T => {
-    if (isInstituteAdmin && profile?.institute_id) {
-      return q.eq("institute_id", profile.institute_id);
-    }
-    return q;
-  }, [isInstituteAdmin, profile?.institute_id]);
+  // Stable helper — only changes when auth state changes
+  const applyInstituteFilter = useCallback(
+    (q: ReturnType<typeof supabase.from>) => {
+      if (isInstituteAdmin && profile?.institute_id) {
+        return (q as unknown as { eq: (a: string, b: string) => typeof q }).eq("institute_id", profile.institute_id);
+      }
+      return q;
+    },
+    [isInstituteAdmin, profile?.institute_id]
+  );
+
+  // Wait for profile to load so institute filter is correct on first fetch
+  useEffect(() => {
+    if (!profileLoaded) return;
+    loadQuizzes();
+    loadAllQuestions();
+  }, [profileLoaded]);
 
   async function loadQuizzes() {
     setLoading(true);
@@ -93,16 +105,17 @@ export default function AdminQuizzes() {
   }
 
   async function loadAllQuestions() {
-    let q = supabase.from("questions").select(QUESTION_SELECT).order("created_at", { ascending: false }).limit(500);
-    q = buildInstituteFilter(q as never) as typeof q;
+    let q = supabase
+      .from("questions")
+      .select(QUESTION_SELECT)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (isInstituteAdmin && profile?.institute_id) {
+      q = q.eq("institute_id", profile.institute_id);
+    }
     const { data } = await q;
     setAllQuestions((data as unknown as Question[]) ?? []);
   }
-
-  useEffect(() => {
-    loadQuizzes();
-    loadAllQuestions();
-  }, []);
 
   async function openPicker(quizId: string) {
     setSelectedQuizId(quizId);
@@ -111,8 +124,14 @@ export default function AdminQuizzes() {
     setSearchQ("");
     setPickerLoading(true);
 
-    let qQuery = supabase.from("questions").select(QUESTION_SELECT).order("created_at", { ascending: false }).limit(500);
-    qQuery = buildInstituteFilter(qQuery as never) as typeof qQuery;
+    let qQuery = supabase
+      .from("questions")
+      .select(QUESTION_SELECT)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (isInstituteAdmin && profile?.institute_id) {
+      qQuery = qQuery.eq("institute_id", profile.institute_id);
+    }
 
     const [{ data: qs }, { data: qq }] = await Promise.all([
       qQuery,
@@ -127,13 +146,21 @@ export default function AdminQuizzes() {
   async function toggleQuestion(questionId: string) {
     if (!selectedQuizId) return;
     if (quizQuestionIds.has(questionId)) {
-      const { error } = await supabase.from("quiz_questions")
-        .delete().eq("quiz_id", selectedQuizId).eq("question_id", questionId);
+      const { error } = await supabase
+        .from("quiz_questions")
+        .delete()
+        .eq("quiz_id", selectedQuizId)
+        .eq("question_id", questionId);
       if (!error) setQuizQuestionIds(prev => { const s = new Set(prev); s.delete(questionId); return s; });
+      else toast({ title: "Failed to remove question", description: error.message, variant: "destructive" });
     } else {
-      const { error } = await supabase.from("quiz_questions")
-        .insert({ quiz_id: selectedQuizId, question_id: questionId, order_index: quizQuestionIds.size });
+      const { error } = await supabase.from("quiz_questions").insert({
+        quiz_id: selectedQuizId,
+        question_id: questionId,
+        order_index: quizQuestionIds.size,
+      });
       if (!error) setQuizQuestionIds(prev => new Set([...prev, questionId]));
+      else toast({ title: "Failed to add question", description: error.message, variant: "destructive" });
     }
   }
 
@@ -195,15 +222,16 @@ export default function AdminQuizzes() {
 
         if (error) throw error;
 
-        // Bulk-insert all selected questions in one request
+        // Bulk-insert all selected questions in ONE request
         if (selectedQuestionIds.length > 0) {
-          const rows = selectedQuestionIds.map((qid, index) => ({
-            quiz_id: createdQuiz.id,
-            question_id: qid,
-            order_index: index,
-          }));
-          const { error: qErr } = await supabase.from("quiz_questions").insert(rows);
-          if (qErr) toast({ title: "Quiz created but some questions failed to link", description: qErr.message, variant: "destructive" });
+          const { error: qErr } = await supabase.from("quiz_questions").insert(
+            selectedQuestionIds.map((qid, index) => ({
+              quiz_id: createdQuiz.id,
+              question_id: qid,
+              order_index: index,
+            }))
+          );
+          if (qErr) toast({ title: "Quiz created but question linking failed", description: qErr.message, variant: "destructive" });
         }
 
         toast({ title: "Quiz created!" });
@@ -221,6 +249,7 @@ export default function AdminQuizzes() {
   }
 
   async function handleDelete(id: string) {
+    if (!window.confirm("Delete this quiz? This also removes all associated question assignments and cannot be undone.")) return;
     const { error } = await supabase.from("quizzes").delete().eq("id", id);
     if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
     setQuizzes(prev => prev.filter(q => q.id !== id));
@@ -236,8 +265,13 @@ export default function AdminQuizzes() {
 
   if (!isAdmin) return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
 
-  // --- Derived lists for the picker modal ---
-  const modalSubjectFiltered = pickerSubject === "all" ? allQuestions : allQuestions.filter(q => q.subject_id === pickerSubject);
+  // ── Derived lists ────────────────────────────────────────────────────────
+
+  const modalSubjectFiltered = useMemo(
+    () => pickerSubject === "all" ? allQuestions : allQuestions.filter(q => q.subject_id === pickerSubject),
+    [allQuestions, pickerSubject]
+  );
+
   const modalTopics = useMemo(() => {
     const seen = new Map<string, string>();
     for (const q of modalSubjectFiltered) {
@@ -246,14 +280,17 @@ export default function AdminQuizzes() {
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
   }, [modalSubjectFiltered]);
 
-  const filteredQuestions = useMemo(() => modalSubjectFiltered.filter(q => {
+  const filteredPickerQuestions = useMemo(() => modalSubjectFiltered.filter(q => {
     if (pickerTopic !== "all" && q.topic_id !== pickerTopic) return false;
     if (searchQ && !q.question_text.toLowerCase().includes(searchQ.toLowerCase())) return false;
     return true;
   }), [modalSubjectFiltered, pickerTopic, searchQ]);
 
-  // --- Derived lists for the create-quiz form ---
-  const formSubjectFiltered = formPickerSubject === "all" ? allQuestions : allQuestions.filter(q => q.subject_id === formPickerSubject);
+  const formSubjectFiltered = useMemo(
+    () => formPickerSubject === "all" ? allQuestions : allQuestions.filter(q => q.subject_id === formPickerSubject),
+    [allQuestions, formPickerSubject]
+  );
+
   const formTopics = useMemo(() => {
     const seen = new Map<string, string>();
     for (const q of formSubjectFiltered) {
@@ -268,29 +305,29 @@ export default function AdminQuizzes() {
     return true;
   }), [formSubjectFiltered, formPickerTopic, formSearchQ]);
 
-  function handleModalSubjectChange(val: string) {
-    setPickerSubject(val);
-    setPickerTopic("all");
-  }
+  const selectedQSet = useMemo(() => new Set(selectedQuestionIds), [selectedQuestionIds]);
 
-  // Bulk-add all questions from a topic in ONE insert instead of N individual ones
+  function handleModalSubjectChange(val: string) { setPickerSubject(val); setPickerTopic("all"); }
+
+  // Bulk-add all questions from a topic in ONE insert
   async function handleModalTopicChange(val: string) {
     setPickerTopic(val);
     if (val !== "all" && selectedQuizId) {
-      const topicQIds = allQuestions
+      const newIds = allQuestions
         .filter(q => q.topic_id === val && !quizQuestionIds.has(q.id))
         .map(q => q.id);
 
-      if (topicQIds.length > 0) {
-        const rows = topicQIds.map((qid, idx) => ({
-          quiz_id: selectedQuizId,
-          question_id: qid,
-          order_index: quizQuestionIds.size + idx,
-        }));
-        const { error } = await supabase.from("quiz_questions").insert(rows);
+      if (newIds.length > 0) {
+        const { error } = await supabase.from("quiz_questions").insert(
+          newIds.map((qid, idx) => ({
+            quiz_id: selectedQuizId,
+            question_id: qid,
+            order_index: quizQuestionIds.size + idx,
+          }))
+        );
         if (!error) {
-          setQuizQuestionIds(prev => new Set([...prev, ...topicQIds]));
-          toast({ title: `Added ${topicQIds.length} question${topicQIds.length !== 1 ? "s" : ""} from topic` });
+          setQuizQuestionIds(prev => new Set([...prev, ...newIds]));
+          toast({ title: `Added ${newIds.length} question${newIds.length !== 1 ? "s" : ""} from topic` });
         } else {
           toast({ title: "Failed to add questions", description: error.message, variant: "destructive" });
         }
@@ -298,10 +335,7 @@ export default function AdminQuizzes() {
     }
   }
 
-  function handleFormSubjectChange(val: string) {
-    setFormPickerSubject(val);
-    setFormPickerTopic("all");
-  }
+  function handleFormSubjectChange(val: string) { setFormPickerSubject(val); setFormPickerTopic("all"); }
 
   function handleFormTopicChange(val: string) {
     setFormPickerTopic(val);
@@ -314,8 +348,6 @@ export default function AdminQuizzes() {
     }
   }
 
-  const selectedQSet = useMemo(() => new Set(selectedQuestionIds), [selectedQuestionIds]);
-
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -325,6 +357,7 @@ export default function AdminQuizzes() {
         </Button>
       </div>
 
+      {/* Create / Edit form */}
       {showForm && (
         <form onSubmit={handleSave} className="bg-card border border-border rounded-xl p-6 space-y-4">
           <h2 className="font-semibold">{editingId ? "Edit Quiz" : "Create Quiz"}</h2>
@@ -379,6 +412,7 @@ export default function AdminQuizzes() {
             </div>
           </div>
 
+          {/* Question selector */}
           <div className="space-y-3">
             <label className="text-sm font-medium">Select Questions</label>
             <div className="grid grid-cols-2 gap-2">
@@ -402,27 +436,29 @@ export default function AdminQuizzes() {
               <Input value={formSearchQ} onChange={e => setFormSearchQ(e.target.value)} placeholder="Search questions…" className="pl-9" />
             </div>
             <div className="max-h-64 overflow-y-auto border border-border rounded-xl divide-y divide-border overscroll-contain">
-              {formFilteredQuestions.length === 0
-                ? <p className="text-sm text-muted-foreground text-center py-6">No questions found</p>
-                : formFilteredQuestions.map(q => {
-                    const selected = selectedQSet.has(q.id);
-                    return (
-                      <button type="button" key={q.id}
-                        onClick={() => setSelectedQuestionIds(prev => selected ? prev.filter(id => id !== q.id) : [...prev, q.id])}
-                        className={`w-full text-left p-3 hover:bg-muted/50 transition-colors ${selected ? "bg-primary/10" : ""}`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className={`w-5 h-5 rounded border flex items-center justify-center mt-0.5 shrink-0 ${selected ? "bg-primary border-primary" : "border-border"}`}>
-                            {selected && <Check className="w-3 h-3 text-primary-foreground" />}
+              {allQuestions.length === 0
+                ? <p className="text-sm text-muted-foreground text-center py-6">No questions in the bank yet</p>
+                : formFilteredQuestions.length === 0
+                  ? <p className="text-sm text-muted-foreground text-center py-6">No questions match the filter</p>
+                  : formFilteredQuestions.map(q => {
+                      const selected = selectedQSet.has(q.id);
+                      return (
+                        <button type="button" key={q.id}
+                          onClick={() => setSelectedQuestionIds(prev => selected ? prev.filter(id => id !== q.id) : [...prev, q.id])}
+                          className={`w-full text-left p-3 hover:bg-muted/50 transition-colors ${selected ? "bg-primary/10" : ""}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center mt-0.5 shrink-0 ${selected ? "bg-primary border-primary" : "border-border"}`}>
+                              {selected && <Check className="w-3 h-3 text-primary-foreground" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm line-clamp-2">{q.question_text}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{q.subjects?.name ?? "General"}{q.topics?.name ? ` · ${q.topics.name}` : ""}</p>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-sm line-clamp-2">{q.question_text}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{q.subjects?.name ?? "General"}{q.topics?.name ? ` · ${q.topics.name}` : ""}</p>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })
+                        </button>
+                      );
+                    })
               }
             </div>
             <p className="text-xs text-muted-foreground">{selectedQuestionIds.length} question{selectedQuestionIds.length !== 1 ? "s" : ""} selected</p>
@@ -437,47 +473,51 @@ export default function AdminQuizzes() {
         </form>
       )}
 
+      {/* Quiz list */}
       {loading ? (
-        <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-card border border-border rounded-xl animate-pulse" />)}</div>
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-card border border-border rounded-xl animate-pulse" />)}
+        </div>
+      ) : quizzes.length === 0 ? (
+        <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">No quizzes yet. Create one!</div>
       ) : (
         <div className="space-y-3">
-          {quizzes.length === 0
-            ? <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">No quizzes yet. Create one!</div>
-            : quizzes.map(quiz => (
-                <div key={quiz.id} className="bg-card border border-border rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{quiz.title}</div>
-                      <div className="text-sm text-muted-foreground mt-0.5">
-                        {quiz.subjects?.name ?? "Mixed"} · {quiz.duration_minutes}m · {quiz.quiz_type}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap shrink-0">
-                      <Select value={quiz.status} onValueChange={v => updateStatus(quiz.id, v as "upcoming" | "live" | "ended")}>
-                        <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent position="popper" sideOffset={4}>
-                          <SelectItem value="upcoming">Upcoming</SelectItem>
-                          <SelectItem value="live">Live</SelectItem>
-                          <SelectItem value="ended">Ended</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button variant="outline" size="sm" onClick={() => openPicker(quiz.id)}>Questions</Button>
-                      <Button variant="ghost" size="sm" onClick={() => startEdit(quiz)}><Edit className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(quiz.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                    </div>
+          {quizzes.map(quiz => (
+            <div key={quiz.id} className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">{quiz.title}</div>
+                  <div className="text-sm text-muted-foreground mt-0.5">
+                    {quiz.subjects?.name ?? "Mixed"} · {quiz.duration_minutes}m · {quiz.quiz_type}
                   </div>
                 </div>
-              ))
-          }
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <Select value={quiz.status} onValueChange={v => updateStatus(quiz.id, v as "upcoming" | "live" | "ended")}>
+                    <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent position="popper" sideOffset={4}>
+                      <SelectItem value="upcoming">Upcoming</SelectItem>
+                      <SelectItem value="live">Live</SelectItem>
+                      <SelectItem value="ended">Ended</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="sm" onClick={() => openPicker(quiz.id)}>Questions</Button>
+                  <Button variant="ghost" size="sm" onClick={() => startEdit(quiz)}><Edit className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(quiz.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Question picker modal */}
+      {/* Question picker modal — slides up from bottom on mobile */}
       {selectedQuizId && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90dvh] sm:max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
-              <h2 className="font-semibold">{quizQuestionIds.size} question{quizQuestionIds.size !== 1 ? "s" : ""} selected</h2>
+              <h2 className="font-semibold">
+                {quizQuestionIds.size} question{quizQuestionIds.size !== 1 ? "s" : ""} selected
+              </h2>
               <Button variant="ghost" size="sm" onClick={() => setSelectedQuizId(null)}>
                 <X className="w-4 h-4" />
               </Button>
@@ -511,9 +551,9 @@ export default function AdminQuizzes() {
                 <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
                   <Loader2 className="w-5 h-5 animate-spin" /> Loading questions…
                 </div>
-              ) : filteredQuestions.length === 0 ? (
+              ) : filteredPickerQuestions.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">No questions found</p>
-              ) : filteredQuestions.map(q => {
+              ) : filteredPickerQuestions.map(q => {
                 const selected = quizQuestionIds.has(q.id);
                 return (
                   <button key={q.id} onClick={() => toggleQuestion(q.id)}
