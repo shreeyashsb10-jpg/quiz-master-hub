@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, XCircle, Upload, Trash2, Search } from "lucide-react";
+import { CheckCircle, XCircle, Upload, Trash2, Search, Loader2 } from "lucide-react";
 
 interface ParsedQuestion {
   question_text: string;
@@ -37,7 +37,6 @@ interface StoredQuestion {
 
 export default function AdminQuestions() {
   const { profile, isAdmin, isInstituteAdmin } = useAuth();
-  // Bug 2: filter subjects by admin's assigned category
   const { subjects } = useSubjects(profile?.category_id);
   const { toast } = useToast();
 
@@ -47,6 +46,7 @@ export default function AdminQuestions() {
   const [bulkText, setBulkText] = useState("");
   const [parsed, setParsed] = useState<ParsedQuestion[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveLabel, setSaveLabel] = useState("");
 
   const [questions, setQuestions] = useState<StoredQuestion[]>([]);
   const [loadingBank, setLoadingBank] = useState(false);
@@ -59,9 +59,12 @@ export default function AdminQuestions() {
 
   async function loadBank() {
     setLoadingBank(true);
-    let q = supabase.from("questions").select("*, subjects(name), topics(name)").order("created_at", { ascending: false }).limit(100);
+    let q = supabase
+      .from("questions")
+      .select("id, question_text, correct_answer, difficulty, subject_id, topic_id, subjects(name), topics(name)")
+      .order("created_at", { ascending: false })
+      .limit(100);
     if (bankSubject !== "all") q = q.eq("subject_id", bankSubject);
-    // Bug 1: institute admins only see their own questions
     if (isInstituteAdmin && profile?.institute_id) {
       q = q.eq("institute_id", profile.institute_id);
     }
@@ -81,7 +84,7 @@ export default function AdminQuestions() {
     toast({ title: `Parsed ${result.length} question${result.length !== 1 ? "s" : ""}` });
   }
 
-  async function handleImageUpload(idx: number, file: File) {
+  function handleImageUpload(idx: number, file: File) {
     if (file.size > 2 * 1024 * 1024) { toast({ title: "Max 2MB per image", variant: "destructive" }); return; }
     const url = URL.createObjectURL(file);
     setParsed(prev => prev.map((q, i) => i === idx ? { ...q, image_file: file, preview_url: url } : q));
@@ -90,30 +93,63 @@ export default function AdminQuestions() {
   async function handleSaveAll() {
     if (!selectedSubjectId) { toast({ title: "Select a subject first", variant: "destructive" }); return; }
     if (parsed.length === 0) { toast({ title: "No questions to save", variant: "destructive" }); return; }
+
     setSaving(true);
+    setSaveLabel("Preparing…");
 
     try {
+      // 1. Resolve or create the topic (single DB round-trip)
       let topicId: string | null = null;
       if (topicName.trim()) {
-        const { data: existingTopic } = await supabase.from("topics").select("id").eq("subject_id", selectedSubjectId).eq("name", topicName.trim()).single();
-        if (existingTopic) {
-          topicId = existingTopic.id;
+        const { data: existing } = await supabase
+          .from("topics")
+          .select("id")
+          .eq("subject_id", selectedSubjectId)
+          .eq("name", topicName.trim())
+          .maybeSingle();
+
+        if (existing) {
+          topicId = existing.id;
         } else {
-          const { data: newTopic } = await supabase.from("topics").insert({ subject_id: selectedSubjectId, name: topicName.trim() }).select("id").single();
-          topicId = newTopic?.id ?? null;
+          const { data: created } = await supabase
+            .from("topics")
+            .insert({ subject_id: selectedSubjectId, name: topicName.trim() })
+            .select("id")
+            .single();
+          topicId = created?.id ?? null;
         }
       }
 
-      for (const q of parsed) {
-        let imageUrl: string | null = null;
-        if (q.image_file) {
-          const ext = q.image_file.name.split(".").pop();
-          const path = `questions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-          await supabase.storage.from("question-images").upload(path, q.image_file);
-          const { data } = supabase.storage.from("question-images").getPublicUrl(path);
-          imageUrl = data.publicUrl;
+      // 2. Upload images in parallel batches of 3 (avoids overwhelming storage)
+      const imageUrls: (string | null)[] = new Array(parsed.length).fill(null);
+      const withImages = parsed
+        .map((q, i) => ({ q, i }))
+        .filter(({ q }) => !!q.image_file);
+
+      if (withImages.length > 0) {
+        let done = 0;
+        const BATCH = 3;
+        for (let b = 0; b < withImages.length; b += BATCH) {
+          setSaveLabel(`Uploading images ${done + 1}–${Math.min(done + BATCH, withImages.length)} of ${withImages.length}…`);
+          await Promise.all(
+            withImages.slice(b, b + BATCH).map(async ({ q, i }) => {
+              const ext = q.image_file!.name.split(".").pop();
+              const path = `questions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+              const { error: upErr } = await supabase.storage.from("question-images").upload(path, q.image_file!);
+              if (!upErr) {
+                const { data } = supabase.storage.from("question-images").getPublicUrl(path);
+                imageUrls[i] = data.publicUrl;
+              }
+              done++;
+            })
+          );
         }
-        const questionPayload: Record<string, unknown> = {
+      }
+
+      // 3. Build all rows and bulk-insert in ONE request
+      setSaveLabel(`Saving ${parsed.length} questions…`);
+      const rows = parsed.map((q, i) => {
+        const row: Record<string, unknown> = {
           subject_id: selectedSubjectId,
           topic_id: topicId,
           question_text: q.question_text,
@@ -123,36 +159,45 @@ export default function AdminQuestions() {
           option_d: q.option_d,
           correct_answer: q.correct_answer,
           explanation: q.explanation || null,
-          image_url: imageUrl,
+          image_url: imageUrls[i],
+          difficulty: "medium",
         };
-        // Bug 1: tag question with institute_id for institute admins
         if (isInstituteAdmin && profile?.institute_id) {
-          questionPayload.institute_id = profile.institute_id;
+          row.institute_id = profile.institute_id;
         }
-        await supabase.from("questions").insert(questionPayload);
-      }
+        return row;
+      });
 
-      toast({ title: `Saved ${parsed.length} questions!` });
+      const { error } = await supabase.from("questions").insert(rows);
+      if (error) throw error;
+
+      toast({ title: `Saved ${parsed.length} question${parsed.length !== 1 ? "s" : ""}!` });
       setParsed([]);
       setBulkText("");
       setTopicName("");
     } catch (err) {
       toast({ title: "Save failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSaving(false);
+      setSaveLabel("");
     }
-    setSaving(false);
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("questions").delete().eq("id", id);
+    const { error } = await supabase.from("questions").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
     setQuestions(prev => prev.filter(q => q.id !== id));
     toast({ title: "Question deleted" });
   }
 
   if (!isAdmin) return <div className="p-6 text-center text-muted-foreground">Access Denied</div>;
 
-  const filteredBank = questions.filter(q =>
-    !searchText || q.question_text.toLowerCase().includes(searchText.toLowerCase())
-  );
+  const filteredBank = searchText
+    ? questions.filter(q => q.question_text.toLowerCase().includes(searchText.toLowerCase()))
+    : questions;
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
@@ -169,9 +214,13 @@ export default function AdminQuestions() {
             <h2 className="font-semibold">Step 1 — Select Subject & Topic</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
-                <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-                <SelectContent>
-                  {subjects.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                <SelectTrigger>
+                  <SelectValue placeholder="Select subject" />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4} className="max-h-64 overflow-y-auto">
+                  {subjects.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Input value={topicName} onChange={e => setTopicName(e.target.value)} placeholder="Topic name (optional)" />
@@ -180,10 +229,10 @@ export default function AdminQuestions() {
 
           <div className="bg-card border border-border rounded-xl p-6 space-y-4">
             <h2 className="font-semibold">Step 2 — Paste Questions</h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               Format per question:<br />
               Question: ...<br />
-              A. ...<br />B. ...<br />C. ...<br />D. ...<br />
+              A. &nbsp;...&nbsp; B. &nbsp;...&nbsp; C. &nbsp;...&nbsp; D. ...<br />
               Answer: C<br />
               Explanation: ...
             </p>
@@ -198,12 +247,27 @@ export default function AdminQuestions() {
 
           {parsed.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <h2 className="font-semibold">Step 3 — Preview & Save ({parsed.length} questions)</h2>
-                <Button onClick={handleSaveAll} disabled={saving}>
-                  {saving ? "Saving..." : `Save All ${parsed.length} Questions`}
+                <Button onClick={handleSaveAll} disabled={saving} className="min-w-40">
+                  {saving ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {saveLabel || "Saving…"}
+                    </span>
+                  ) : (
+                    `Save All ${parsed.length} Questions`
+                  )}
                 </Button>
               </div>
+
+              {saving && (
+                <div className="bg-primary/10 border border-primary/20 rounded-xl px-4 py-3 text-sm text-primary flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  {saveLabel}
+                </div>
+              )}
+
               {parsed.map((q, idx) => (
                 <div key={idx} className="bg-card border border-border rounded-xl p-5 space-y-3">
                   <div className="flex items-start justify-between gap-2">
@@ -215,7 +279,7 @@ export default function AdminQuestions() {
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     {(["A", "B", "C", "D"] as const).map(opt => (
                       <div key={opt} className={`flex items-center gap-2 p-2 rounded-lg ${q.correct_answer === opt ? "bg-emerald-500/10 text-emerald-400" : "bg-background"}`}>
-                        {q.correct_answer === opt ? <CheckCircle className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3" />}
+                        {q.correct_answer === opt ? <CheckCircle className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
                         <span className="font-medium">{opt}.</span>
                         <span className="truncate">{q[`option_${opt.toLowerCase()}` as keyof ParsedQuestion] as string}</span>
                       </div>
@@ -226,7 +290,7 @@ export default function AdminQuestions() {
                     <label className="flex items-center gap-2 text-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
                       <Upload className="w-3 h-3" />
                       {q.preview_url ? "Change image" : "Add image"}
-                      <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(idx, e.target.files[0])} />
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(idx, e.target.files[0])} />
                     </label>
                     {q.preview_url && <img src={q.preview_url} alt="preview" className="h-12 rounded object-contain border border-border" />}
                   </div>
@@ -242,11 +306,13 @@ export default function AdminQuestions() {
           <div className="flex gap-3 flex-wrap">
             <div className="relative flex-1 min-w-40">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="Search questions..." className="pl-9" />
+              <Input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="Search questions…" className="pl-9" />
             </div>
             <Select value={bankSubject} onValueChange={setBankSubject}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="All subjects" /></SelectTrigger>
-              <SelectContent>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="All subjects" />
+              </SelectTrigger>
+              <SelectContent position="popper" sideOffset={4} className="max-h-64 overflow-y-auto">
                 <SelectItem value="all">All Subjects</SelectItem>
                 {subjects.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
               </SelectContent>
@@ -263,7 +329,7 @@ export default function AdminQuestions() {
                 <div key={q.id} className="flex items-start justify-between gap-4 p-4">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium line-clamp-2">{q.question_text}</p>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">{q.subjects?.name}</span>
                       {q.topics?.name && <span className="text-xs text-muted-foreground">· {q.topics.name}</span>}
                       <span className="text-xs text-emerald-400">Ans: {q.correct_answer}</span>
