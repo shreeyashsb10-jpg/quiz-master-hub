@@ -169,6 +169,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    // ── Hard bail-out ────────────────────────────────────────────────────────
+    // If Supabase is unreachable (slow network, cold start, rate-limit), the
+    // getSession() / fetchProfile() awaits could hang for minutes. This timer
+    // forces the app to unblock after 6 s so the user always sees something.
+    const bail = setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        setProfileLoaded(true);
+      }
+    }, 6_000);
+
     async function initSession() {
       try {
         const { data: { session: s }, error } = await supabase.auth.getSession();
@@ -191,6 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Network error or unexpected failure — unblock the UI as guest
         if (!cancelled) clearStaleAuthTokens();
       } finally {
+        clearTimeout(bail);
         if (!cancelled) setLoading(false);
       }
     }
@@ -235,6 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      clearTimeout(bail);
       subscription.unsubscribe();
     };
   }, []);
