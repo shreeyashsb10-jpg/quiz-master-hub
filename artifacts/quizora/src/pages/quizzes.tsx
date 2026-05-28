@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuizzes } from "@/hooks/useQuizzes";
@@ -6,27 +6,32 @@ import { useSubjects } from "@/hooks/useSubjects";
 import { getQuizStatusInfo, formatCountdown } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Clock, Filter } from "lucide-react";
+import { Play, Clock, Filter, AlertCircle } from "lucide-react";
 
 export default function QuizzesPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
-  const { profile } = useAuth();
+  const { profile, profileLoaded } = useAuth();
 
   const [statusFilter, setStatusFilter] = useState(params.get("status") ?? "all");
   const [typeFilter, setTypeFilter] = useState(params.get("type") ?? "all");
   const [subjectFilter, setSubjectFilter] = useState(params.get("subject") ?? "all");
 
-  // Bug 1: students with an institute only see their institute's quizzes + public ones
-  const { quizzes, loading } = useQuizzes({
+  const { quizzes, loading, error: qError } = useQuizzes({
     type: typeFilter !== "all" ? typeFilter : undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
     subject_id: subjectFilter !== "all" ? subjectFilter : undefined,
     institute_id: profile?.institute_id ?? undefined,
+    profileLoaded,
   });
 
-  // Bug 2: filter subjects by student's category
-  const { subjects } = useSubjects(profile?.category_id);
+  const { subjects, error: sError } = useSubjects(profile?.category_id, profileLoaded);
+
+  // Surface any errors to the console so they're visible during debugging
+  useEffect(() => {
+    if (qError) console.error("[QuizzesPage] quizzes error:", qError);
+    if (sError) console.error("[QuizzesPage] subjects error:", sError);
+  }, [qError, sError]);
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
@@ -76,6 +81,14 @@ export default function QuizzesPage() {
           {[...Array(6)].map((_, i) => (
             <div key={i} className="h-48 bg-card border border-border rounded-xl animate-pulse" />
           ))}
+        </div>
+      ) : qError ? (
+        <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-8 flex items-start gap-3 text-destructive">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-medium">Failed to load quizzes</div>
+            <div className="text-xs mt-1 opacity-80">{qError}</div>
+          </div>
         </div>
       ) : quizzes.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 text-center text-muted-foreground">

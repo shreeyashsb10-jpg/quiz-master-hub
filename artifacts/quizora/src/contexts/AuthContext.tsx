@@ -126,7 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Auto-create a new student profile for first-time login
+      // Auto-create a new profile for first-time login.
+      // NOTE: role must be 'user' — the schema CHECK constraint does NOT allow 'student'.
       if (email) {
         const { data: created, error: createErr } = await supabase
           .from("users")
@@ -134,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: userId,
             email,
             full_name: null,
-            role: "student",
+            role: "user",
             plan_type: "free",
             total_points: 0,
             weekly_points: 0,
@@ -145,7 +146,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select("*")
           .single();
 
-        if (!createErr && created) {
+        if (createErr) {
+          console.error("[AuthContext] Auto-create profile FAILED", createErr.code, createErr.message);
+        } else if (created) {
           try { sessionStorage.setItem(cacheKey, JSON.stringify(created)); } catch { /* ignore */ }
           setProfile(created as UserProfile);
         }

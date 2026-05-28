@@ -40,8 +40,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 export default function AdminQuestions() {
-  const { profile, isAdmin, isInstituteAdmin } = useAuth();
-  const { subjects } = useSubjects(profile?.category_id);
+  const { profile, isAdmin, isInstituteAdmin, profileLoaded } = useAuth();
+  const { subjects, error: subjectsError } = useSubjects(profile?.category_id, profileLoaded);
+
+  useEffect(() => {
+    if (subjectsError) console.error("[AdminQuestions] subjects error:", subjectsError);
+  }, [subjectsError]);
   const { toast } = useToast();
 
   const [tab, setTab] = useState<"bulk" | "bank">("bulk");

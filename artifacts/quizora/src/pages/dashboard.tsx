@@ -12,13 +12,29 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BookOpen, Trophy, Zap, Target, Clock, Users, ChevronRight, Play } from "lucide-react";
 
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { profile, profileLoaded } = useAuth();
 
-  const { quizzes, loading: qLoading } = useQuizzes({
+  // Log profile info so we can trace filtering issues in the console
+  useEffect(() => {
+    if (profileLoaded) {
+      console.log(
+        "[Dashboard] profile loaded",
+        "| category_id:", profile?.category_id ?? "(null)",
+        "| institute_id:", profile?.institute_id ?? "(null)",
+        "| role:", profile?.role ?? "(null)",
+      );
+    }
+  }, [profileLoaded, profile?.category_id, profile?.institute_id]);
+
+  const { quizzes, loading: qLoading, error: qError } = useQuizzes({
     institute_id: profile?.institute_id ?? undefined,
+    profileLoaded,
   });
 
-  const { subjects, loading: sLoading } = useSubjects(profile?.category_id);
+  const { subjects, loading: sLoading, error: sError } = useSubjects(
+    profile?.category_id,
+    profileLoaded,
+  );
   const { attempts } = useMyAttempts();
   // Only fetch top 5 for the dashboard preview
   const { entries: leaderboard } = useLeaderboard("global", undefined, 5);
@@ -55,6 +71,12 @@ export default function Dashboard() {
       : 0;
     return { totalAttempted: total, avgAccuracy: avg };
   }, [attempts]);
+
+  // Surface query errors in console (errors are also logged inside the hooks)
+  useEffect(() => {
+    if (qError) console.error("[Dashboard] quizzes error:", qError);
+    if (sError) console.error("[Dashboard] subjects error:", sError);
+  }, [qError, sError]);
 
   // tick is only used by countdown displays — reference it here to avoid lint warning
   void tick;

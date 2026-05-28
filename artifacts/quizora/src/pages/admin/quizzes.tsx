@@ -38,7 +38,11 @@ const QUIZ_SELECT =
 
 export default function AdminQuizzes() {
   const { profile, user, isAdmin, isInstituteAdmin, profileLoaded } = useAuth();
-  const { subjects } = useSubjects(profile?.category_id);
+  const { subjects, error: subjectsError } = useSubjects(profile?.category_id, profileLoaded);
+
+  useEffect(() => {
+    if (subjectsError) console.error("[AdminQuizzes] subjects error:", subjectsError);
+  }, [subjectsError]);
   const { toast } = useToast();
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
