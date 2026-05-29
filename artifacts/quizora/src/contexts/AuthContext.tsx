@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(hasStoredSession);
+  const [loading, setLoading] = useState(hasStoredSession());
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   /**
@@ -186,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function initSession() {
       try {
         const { data: { session: s }, error } = await supabase.auth.getSession();
+        await supabase.auth.refreshSession();
         if (cancelled) return;
 
         if (error) {
