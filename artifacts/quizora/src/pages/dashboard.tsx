@@ -224,14 +224,14 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {subjects.slice(0, 9).map(subject => (
+              {subjects?.slice(0, 9)?.map(subject => (
                 <Link key={subject.id} href={`/quizzes?subject=${subject.id}`}>
                   <div className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-primary/50 transition-colors">
                     <div className="font-medium text-sm leading-tight">{subject.name}</div>
                   </div>
                 </Link>
               ))}
-              {subjects.length === 0 && (
+              {subjects?.length === 0 && (
                 <p className="text-sm text-muted-foreground col-span-3 py-4 text-center">No subjects available yet.</p>
               )}
             </div>
@@ -249,7 +249,7 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="bg-card border border-border rounded-xl divide-y divide-border">
-            {leaderboard.map((entry, i) => (
+            {leaderboard?.map((entry, i) => (
               <div key={entry.id} className="flex items-center gap-3 p-3">
                 <span className={`text-sm font-bold w-5 ${i === 0 ? "text-amber-400" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-600" : "text-muted-foreground"}`}>
                   #{i + 1}
@@ -264,7 +264,7 @@ export default function Dashboard() {
                 <span className="text-sm font-semibold text-amber-400">{entry.score}</span>
               </div>
             ))}
-            {leaderboard.length === 0 && (
+            {leaderboard?.length === 0 && (
               <div className="p-6 text-center text-sm text-muted-foreground">No scores yet</div>
             )}
           </div>
@@ -278,7 +278,7 @@ export default function Dashboard() {
             <Users className="w-4 h-4" /> Recent Activity
           </h2>
           <div className="bg-card border border-border rounded-xl divide-y divide-border">
-            {attempts.slice(0, 5).map(attempt => (
+            {attempts?.slice(0, 5)?.map(attempt => (
               <div key={attempt.id} className="flex items-center justify-between p-4">
                 <div>
                   <div className="font-medium text-sm">{attempt.quizzes?.title ?? "Quiz"}</div>
