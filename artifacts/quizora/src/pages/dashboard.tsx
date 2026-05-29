@@ -26,9 +26,10 @@ export default function Dashboard() {
     }
   }, [profileLoaded, profile?.category_id, profile?.institute_id]);
 
-  const quizzes: any[] = [];
-  const qLoading = false;
-  const qError = null;
+  const { quizzes, loading: qLoading, error: qError } = useQuizzes({
+    institute_id: profile?.institute_id ?? undefined,
+    profileLoaded,
+  });
 
   const subjects: any[] = [];
   const sLoading = false;
