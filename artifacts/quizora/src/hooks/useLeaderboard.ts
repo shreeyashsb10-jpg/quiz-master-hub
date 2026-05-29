@@ -27,7 +27,7 @@ export function useLeaderboard(
     setLoading(true);
     setError(null);
 
-    const fields = "id, user_id, quiz_id, period, score, rank, accuracy, time_taken_seconds, updated_at, users(full_name, college_name, avatar_url)";
+    const fields = "id, user_id, quiz_id, period, score, rank, accuracy, time_taken_seconds, updated_at";
 
     let q;
     if (period === "quiz") {
