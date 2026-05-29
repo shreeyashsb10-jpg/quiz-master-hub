@@ -26,18 +26,17 @@ export default function Dashboard() {
     }
   }, [profileLoaded, profile?.category_id, profile?.institute_id]);
 
-  const { quizzes, loading: qLoading, error: qError } = useQuizzes({
-    institute_id: profile?.institute_id ?? undefined,
-    profileLoaded,
-  });
+  const quizzes: any[] = [];
+  const qLoading = false;
+  const qError = null;
 
-  const { subjects, loading: sLoading, error: sError } = useSubjects(
-    profile?.category_id,
-    profileLoaded,
-  );
-  const { attempts } = useMyAttempts();
-  // Only fetch top 5 for the dashboard preview
-  const { entries: leaderboard } = useLeaderboard("global", undefined, 5);
+  const subjects: any[] = [];
+  const sLoading = false;
+  const sError = null;
+
+  const attempts: any[] = [];
+
+  const leaderboard: any[] = [];
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
