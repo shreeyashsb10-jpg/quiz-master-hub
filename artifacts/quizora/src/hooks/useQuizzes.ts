@@ -62,13 +62,9 @@ export function useQuizzes(filters?: {
 
     // Institute isolation
     if (filters?.institute_id) {
-      if (filters?.strict_institute) {
-        q = q.eq("institute_id", filters.institute_id);
-      } else {
-        // Student: their institute's quizzes + public (null institute_id)
-        q = q.or(`institute_id.eq.${filters.institute_id},institute_id.is.null`);
-      }
+      q = q.eq("institute_id", filters.institute_id);
     }
+    
 
     const { data, error: err } = await q;
 
