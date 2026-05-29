@@ -31,13 +31,13 @@ export default function Dashboard() {
     profileLoaded,
   });
 
-  const subjects: any[] = [];
-  const sLoading = false;
-  const sError = null;
-
-  const attempts: any[] = [];
-
-  const leaderboard: any[] = [];
+  const { subjects, loading: sLoading, error: sError } = useSubjects(
+    profile?.category_id,
+    profileLoaded,
+  );
+  const { attempts } = useMyAttempts();
+  // Only fetch top 5 for the dashboard preview
+  const { entries: leaderboard } = useLeaderboard("global", undefined, 5);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {

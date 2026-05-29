@@ -43,6 +43,7 @@ export function useQuizzes(filters?: {
     // Don't query until profile has resolved
     if (filters?.profileLoaded === false) {
       console.log("[useQuizzes] Waiting for profile to load…");
+      setLoading(false);
       return;
     }
 
